@@ -1,0 +1,140 @@
+// pin variables
+int channelA = 2;
+int enable = 3;
+int trigger = 5;
+int echo = 6;
+int output1 = 10;
+int output2 = 11;
+int butt = 13;
+// sensor variables
+unsigned long previousTime = 0;
+unsigned long currentTime = 0;
+double wait = 0.01;
+int distance;
+// motor variables
+double pulses = 0;
+double pulsesPerRev = 223;
+int preScalar = 64;
+double measuredSpeed = 0;
+double speed = 0;
+int previousSpeed = 0;
+int newSpeed = 1;
+// PID variables
+double error = 0;
+double previousError = 0;
+double errorSum = 0;
+double dError = 0;
+double signalPWM = 0;
+double kP = 1.5;
+double kI = 0.2;
+double kD = 1;
+
+void setup() {
+  // enable serial monitor
+  Serial.begin(9600);
+
+  // set pin modes
+  pinMode(channelA, INPUT);
+  pinMode(enable, OUTPUT);
+  pinMode(trigger, OUTPUT);
+  pinMode(echo, INPUT);
+  pinMode(butt, INPUT);
+  pinMode(output1, OUTPUT);
+  pinMode(output2, OUTPUT);
+
+  // motor input
+  digitalWrite(output1, HIGH);
+  digitalWrite(output2, LOW);
+
+  // external interrupt
+  attachInterrupt(digitalPinToInterrupt(channelA), count, RISING);
+
+  // internal interrupt
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+  OCR1A = 12499;
+  TCCR1B = _BV(WGM12) | _BV(CS11) | _BV(CS10);
+  // compare interrupt
+  TIMSK1 = _BV(OCIE1A);
+}
+
+void loop() {
+  // desired speed
+  if (distance <= 50) {
+    speed = 50;
+  } else if (distance > 50 & distance <= 150) {
+    speed = 120;
+  } else {
+    speed = 250;
+  }
+
+  // sensor distance
+  digitalWrite(trigger, HIGH);
+  currentTime = millis();
+  if (currentTime - previousTime >= wait) {
+    previousTime = currentTime;
+    digitalWrite(trigger, LOW);
+  }
+  distance = 0.0343 * (pulseIn(echo, HIGH) / 2);
+
+  if (digitalRead(butt) == HIGH) {
+
+    // PWM signal
+    analogWrite(enable, newSpeed);
+  } else {
+    analogWrite(enable, map(speed, 0, 250, 0, 255));
+  }
+}
+
+// obtain external interupt
+void count() { pulses++; }
+
+// interrupt service routine
+ISR(TIMER1_COMPA_vect) {
+  // obtain measured speed
+  measuredSpeed = (60 * pulses) / (pulsesPerRev * 0.1);
+
+  Serial.print(speed);
+  Serial.print(" , ");
+  Serial.print(measuredSpeed);
+  Serial.print(" ; ");
+  Serial.println(millis());
+  // Serial.println("ms");
+
+  // reset pulses
+  pulses = 0;
+
+  // obtain errors
+  error = speed - measuredSpeed;
+  errorSum = errorSum + error * 0.1;
+  dError = (error - previousError) / 0.1;
+
+  // PWM signal
+  signalPWM = kP * error + kI * errorSum + kD * dError;
+
+  // re-map PWM signal
+  if (signalPWM > 350) {
+    signalPWM = 350;
+  }
+  if (signalPWM < -350) {
+    signalPWM = -350;
+  }
+
+  // change speed
+  newSpeed = speed + signalPWM;
+
+  // map new speed
+  if (newSpeed > 350) {
+    newSpeed = 350;
+  }
+  if (newSpeed < 0) {
+    newSpeed = 0;
+  }
+
+  // fit bounds
+  newSpeed = map(newSpeed, 0, 350, 0, 255);
+
+  // update error
+  previousError = error;
+}

@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "Plant_Board",
+			"path": "Plant_Board"
+		},
+		{
+			"name": "Interface_Board",
+			"path": "Interface_Board"
+		},
+		{
+			"name": "ambil_data_encoder",
+			"path": "ambil_data_encoder"
+		}
+	],
+	"settings": {}
+}

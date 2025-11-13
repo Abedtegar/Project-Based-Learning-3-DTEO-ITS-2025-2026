@@ -1,0 +1,142 @@
+// ========================================
+// CONTOH PENGGUNAAN CONTROL MENU SYSTEM
+// Rename file ini menjadi main.cpp untuk menggunakannya
+// ========================================
+
+#include <Arduino.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
+#include <SPI.h>
+#include <WiFi.h>
+#include <esp_now.h>
+
+#include "PinConfig.h"
+#include "ControlMenuSystem.h"
+#include "EncoderControl.h"
+
+// ========================================
+// GLOBAL OBJECTS
+// ========================================
+
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+ControlMenuSystem menuSystem(&tft);
+EncoderControl encoder(ENCODER_CLK, ENCODER_DT, ENCODER_SW);
+
+// ========================================
+// ESP-NOW DATA STRUCTURES
+// ========================================
+
+typedef struct {
+  float speed;
+  uint8_t direction;
+  uint8_t mode;
+  unsigned long timestamp;
+} EscalatorMessage;
+
+typedef struct {
+  float speed;
+  uint8_t mode;
+  unsigned long timestamp;
+} MotorMessage;
+
+// ========================================
+// ESP-NOW CALLBACKS
+// ========================================
+
+void onDataReceive(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+  if (data_len == sizeof(EscalatorMessage)) {
+    EscalatorMessage msg;
+    memcpy(&msg, data, sizeof(msg));
+    Direction dir = (msg.direction == 0) ? DIR_FORWARD : DIR_REVERSE;
+    menuSystem.updateEscalatorData(msg.speed, dir);
+  } else if (data_len == sizeof(MotorMessage)) {
+    MotorMessage msg;
+    memcpy(&msg, data, sizeof(msg));
+    menuSystem.updateMotorACData(msg.speed);
+  }
+}
+
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sent OK" : "Send Fail");
+}
+
+// ========================================
+// ENCODER CALLBACKS
+// ========================================
+
+void onEncoderRotate(int direction) {
+  menuSystem.navigate(direction);
+  digitalWrite(LED_STATUS, HIGH);
+  delay(10);
+  digitalWrite(LED_STATUS, LOW);
+}
+
+void onEncoderClick() {
+  menuSystem.select();
+}
+
+void onEncoderLongPress() {
+  menuSystem.back();
+}
+
+// ========================================
+// SETUP & LOOP
+// ========================================
+
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  Serial.println("Control Interface v2.0");
+  
+  pinMode(LED_STATUS, OUTPUT);
+  
+  // Init LCD (Portrait mode - rotation 0 or 2)
+  tft.initR(INITR_BLACKTAB);
+  tft.setRotation(0); // 0 = portrait, 2 = portrait terbalik
+  
+  // Init Menu
+  menuSystem.begin();
+  
+  // Init Encoder
+  encoder.begin();
+  encoder.onRotate(onEncoderRotate);
+  encoder.onClick(onEncoderClick);
+  encoder.onLongPress(onEncoderLongPress);
+  
+  // Init WiFi & ESP-NOW
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  menuSystem.updateNetworkStatus(true, "Direct", WiFi.macAddress(), 0);
+  
+  if (esp_now_init() == ESP_OK) {
+    esp_now_register_recv_cb(onDataReceive);
+    esp_now_register_send_cb(onDataSent);
+    menuSystem.updateESPNowStatus(true, 0);
+  }
+  
+  Serial.println("Setup Complete!");
+}
+
+void loop() {
+  encoder.update();
+  menuSystem.update();
+  
+  // Simulasi data untuk testing (uncomment untuk test)
+  /*
+  static unsigned long lastSim = 0;
+  if (millis() - lastSim > 500) {
+    static float escSpeed = 50;
+    escSpeed += random(-5, 6);
+    escSpeed = constrain(escSpeed, 0, 100);
+    menuSystem.updateEscalatorData(escSpeed, DIR_FORWARD);
+    
+    static float motorSpeed = 1500;
+    motorSpeed += random(-100, 101);
+    motorSpeed = constrain(motorSpeed, 0, 3000);
+    menuSystem.updateMotorACData(motorSpeed);
+    
+    lastSim = millis();
+  }
+  */
+  
+  delay(10);
+}

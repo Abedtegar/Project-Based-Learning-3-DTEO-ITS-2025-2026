@@ -1,0 +1,125 @@
+// ========================================
+// CONTOH PENGGUNAAN NETWORK MANAGER
+// ========================================
+
+#include <Arduino.h>
+#include "NetworkManager.h"
+#include "PinConfig.h"
+
+NetworkManager network;
+
+// ========================================
+// CALLBACK FUNCTIONS
+// ========================================
+
+void onEscalatorData(EscalatorDataPacket data) {
+  Serial.println("\n=== ESCALATOR DATA ===");
+  Serial.printf("Speed: %.2f RPM\n", data.currentSpeed);
+  Serial.printf("Direction: %s\n", data.direction == 0 ? "FORWARD" : "REVERSE");
+  Serial.printf("Mode: %s\n", data.mode == 0 ? "MANUAL" : "AUTO");
+  Serial.printf("PID Output: %.2f\n", data.pidOutput);
+  Serial.printf("Running: %s\n", data.isRunning ? "YES" : "NO");
+}
+
+void onMotorACData(MotorACDataPacket data) {
+  Serial.println("\n=== MOTOR AC DATA ===");
+  Serial.printf("Speed: %.2f RPM\n", data.currentSpeed);
+  Serial.printf("Mode: %s\n", data.mode == 0 ? "MANUAL" : "AUTO");
+  Serial.printf("PID Output: %.2f\n", data.pidOutput);
+  Serial.printf("Running: %s\n", data.isRunning ? "YES" : "NO");
+}
+
+void onSendComplete(const uint8_t *mac, bool success) {
+  Serial.print("Send to ");
+  for (int i = 0; i < 6; i++) {
+    Serial.printf("%02X", mac[i]);
+    if (i < 5) Serial.print(":");
+  }
+  Serial.printf(" - %s\n", success ? "SUCCESS" : "FAILED");
+}
+
+// ========================================
+// SETUP
+// ========================================
+
+void setup() {
+  Serial.begin(SERIAL_BAUD);
+  delay(500);
+  
+  Serial.println("\n========================================");
+  Serial.println("NETWORK MANAGER EXAMPLE");
+  Serial.println("========================================\n");
+  
+  // Initialize WiFi (pilih salah satu)
+  
+  // Option 1: Access Point Mode
+  network.beginWiFiAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
+  
+  // Option 2: Station Mode (uncomment jika ingin menggunakan)
+  // network.beginWiFiSTA();
+  
+  // Initialize ESP-NOW
+  if (network.beginESPNow()) {
+    Serial.println("ESP-NOW ready!");
+  } else {
+    Serial.println("ESP-NOW failed!");
+    return;
+  }
+  
+  // Set MAC addresses dari PinConfig.h
+  uint8_t escalatorMac[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}; // Ganti dengan MAC asli
+  uint8_t motorMac[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02};     // Ganti dengan MAC asli
+  
+  network.setEscalatorMAC(escalatorMac);
+  network.setMotorACMAC(motorMac);
+  
+  // Add peers
+  network.addEscalatorPeer();
+  network.addMotorACPeer();
+  
+  // Set callbacks
+  network.onReceiveEscalatorData(onEscalatorData);
+  network.onReceiveMotorACData(onMotorACData);
+  network.onSendComplete(onSendComplete);
+  
+  // Print status
+  network.printStatus();
+  
+  Serial.println("Setup complete!\n");
+}
+
+// ========================================
+// LOOP
+// ========================================
+
+void loop() {
+  static unsigned long lastSend = 0;
+  
+  // Contoh: Kirim command setiap 5 detik
+  if (millis() - lastSend > 5000) {
+    lastSend = millis();
+    
+    // Kirim command ke Escalator
+    EscalatorCommandPacket escCmd = {};
+    escCmd.commandType = 1; // set_speed
+    escCmd.mode = 0;        // MANUAL
+    escCmd.direction = 0;   // FORWARD
+    escCmd.targetSpeed = 50.0;
+    
+    Serial.println("\nSending Escalator Command...");
+    network.sendEscalatorCommand(escCmd);
+    
+    // Kirim command ke Motor AC
+    MotorACCommandPacket motorCmd = {};
+    motorCmd.commandType = 1; // set_speed
+    motorCmd.mode = 0;        // MANUAL
+    motorCmd.targetSpeed = 1500.0;
+    motorCmd.controlType = 0; // DAC
+    motorCmd.voltageType = 1; // 10V
+    
+    Serial.println("Sending Motor AC Command...");
+    network.sendMotorACCommand(motorCmd);
+  }
+  
+  delay(10);
+}
