@@ -60,8 +60,8 @@ void IRAM_ATTR EncoderControl::handleEncoderISR() {
     return;
 
   // Debounce - ignore interrupts too close together (increased to 2ms)
-  unsigned long currentTime = millis();
-  if (currentTime - instance->lastInterruptTime < 2) {
+  unsigned long LEDCurrentTime = millis();
+  if (LEDCurrentTime - instance->lastInterruptTime < 2) {
     return;
   }
 
@@ -81,7 +81,7 @@ void IRAM_ATTR EncoderControl::handleEncoderISR() {
     } else {
       instance->encoderPos--; // Counter-clockwise
     }
-    instance->lastInterruptTime = currentTime;
+    instance->lastInterruptTime = LEDCurrentTime;
   }
 
   lastCLK = clkState;
@@ -136,22 +136,22 @@ void EncoderControl::update() {
 
   // Check button state dengan debouncing
   bool currentButtonState = !digitalRead(pinSW); // LOW when pressed (pullup)
-  unsigned long currentTime = millis();
+  unsigned long LEDCurrentTime = millis();
 
   if (currentButtonState != lastButtonState) {
     if (currentButtonState) {
       // Button just pressed
-      if (currentTime - lastButtonRelease > debounceDelay) {
-        buttonPressTime = currentTime;
-        lastButtonPress = currentTime;
+      if (LEDCurrentTime - lastButtonRelease > debounceDelay) {
+        buttonPressTime = LEDCurrentTime;
+        lastButtonPress = LEDCurrentTime;
         buttonHandled = false;
       }
     } else {
       // Button just released
-      if (currentTime - lastButtonPress > debounceDelay) {
-        lastButtonRelease = currentTime;
+      if (LEDCurrentTime - lastButtonPress > debounceDelay) {
+        lastButtonRelease = LEDCurrentTime;
 
-        unsigned long pressDuration = currentTime - buttonPressTime;
+        unsigned long pressDuration = LEDCurrentTime - buttonPressTime;
 
         if (!buttonHandled) {
           if (pressDuration >= longPressThreshold) {
@@ -173,7 +173,7 @@ void EncoderControl::update() {
     lastButtonState = currentButtonState;
   } else if (currentButtonState && !buttonHandled) {
     // Button is being held
-    unsigned long pressDuration = currentTime - buttonPressTime;
+    unsigned long pressDuration = LEDCurrentTime - buttonPressTime;
 
     if (pressDuration >= longPressThreshold) {
       // Long press threshold reached while holding

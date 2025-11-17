@@ -1,8 +1,8 @@
 #include "LedControl.h"
 #include "PlantConfig.h"
 
-long Currenttime;
-long PreviousTime;
+unsigned long LEDCurrentTime;
+unsigned long LEDPreviousTime;
 
 void initLedControl() {
   pinMode(LED_WIFI, OUTPUT);
@@ -13,9 +13,9 @@ void initLedControl() {
 
 void setLedState(int ledPin, bool state) { digitalWrite(ledPin, state); }
 void blinkLed(int ledPin, long delayTime) {
-  Currenttime = millis();
-  if (Currenttime - PreviousTime >= delayTime) {
-    PreviousTime = Currenttime;
+  LEDCurrentTime = millis();
+  if (LEDCurrentTime - LEDPreviousTime >= delayTime) {
+    LEDPreviousTime = LEDCurrentTime;
     digitalWrite(ledPin, !digitalRead(ledPin));
   }
 }

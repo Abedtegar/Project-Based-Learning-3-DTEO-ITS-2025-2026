@@ -7,8 +7,8 @@ int output1 = 10;
 int output2 = 11;
 int butt = 13;
 // sensor variables
-unsigned long previousTime = 0;
-unsigned long currentTime = 0;
+unsigned long LEDPreviousTime = 0;
+unsigned long LEDCurrentTime = 0;
 double wait = 0.01;
 int distance;
 // motor variables
@@ -71,9 +71,9 @@ void loop() {
 
   // sensor distance
   digitalWrite(trigger, HIGH);
-  currentTime = millis();
-  if (currentTime - previousTime >= wait) {
-    previousTime = currentTime;
+  LEDCurrentTime = millis();
+  if (LEDCurrentTime - LEDPreviousTime >= wait) {
+    LEDPreviousTime = LEDCurrentTime;
     digitalWrite(trigger, LOW);
   }
   distance = 0.0343 * (pulseIn(echo, HIGH) / 2);

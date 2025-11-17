@@ -11,7 +11,7 @@
 // PWM
 #define PWM_CHANNEL 0
 #define PWM_FREQ 5000
-#define PWM_RESOLUTION 8
+#define PWM_RESOLUTION 12
 
 // DC Motor Encoder Pins
 #define ENCODER_A_PIN 34
@@ -25,6 +25,9 @@
 // AC Motor Control Pins
 #define AC_DAC1_PIN 25
 #define AC_DAC2_PIN 26
+#define ACPWM_CHANNEL 1
+#define ACPWM_FREQ 5000
+#define ACPWM_RESOLUTION 12
 #define AC_DAC_SOURCE_PIN 27
 #define AC_DAC_VOLTAGE_SELECT_PIN 12 // changed
 
