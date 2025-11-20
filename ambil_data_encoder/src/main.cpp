@@ -63,29 +63,27 @@ void IRAM_ATTR handleEncoderb_falling() {
   }
 }
 
-void acsweep(){
-  for (int x = 0;x<=255;x++){
+void acsweep() {
+  for (int x = 0; x <= 255; x++) {
     Serial.print("DAC Value: ");
     Serial.println(x);
-    
-    if (x < 1 ){
+
+    if (x < 1) {
       dacDisable(AC_DAC1_PIN);
       pinMode(AC_DAC1_PIN, OUTPUT);
 
       digitalWrite(AC_DAC1_PIN, LOW);
       delay(5000);
-    }
-    else if (x>254 ){
+    } else if (x > 254) {
       dacDisable(AC_DAC1_PIN);
       pinMode(AC_DAC1_PIN, OUTPUT);
 
       digitalWrite(AC_DAC1_PIN, HIGH);
       delay(5000);
-    }else {
+    } else {
       dacWrite(AC_DAC1_PIN, x);
       delay(10);
     }
-   
   }
   Serial.println("AC sweep complete");
 }
@@ -124,7 +122,7 @@ void setup() {
   Serial.println("Commands:");
   Serial.println("  s<value> - Set speed (0-255), e.g., s150");
   Serial.println("  d<value> - Set direction (0 or 1), e.g., d1");
-  pinMode(AC_DAC1_PIN, OUTPUT) ;
+  pinMode(AC_DAC1_PIN, OUTPUT);
   pinMode(AC_DAC_SOURCE_PIN, OUTPUT);
   pinMode(AC_DAC_VOLTAGE_SELECT_PIN, OUTPUT);
   digitalWrite(AC_DAC_SOURCE_PIN, LOW);
@@ -132,51 +130,51 @@ void setup() {
 }
 
 void loop() {
-// acsweep();
-// delay(1000);
-float analogValue = analogRead(AC_ENCODER_PIN);
-Serial.println(analogValue);
-if (Serial.available() > 0) {
-  String input = Serial.readStringUntil('\n');
-  input.trim();
+  // acsweep();
+  // delay(1000);
+  // float analogValue = analogRead(AC_ENCODER_PIN);
+  // Serial.println(analogValue);
+  if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    input.trim();
 
-  if (input.length() > 0) {
-    char command = input.charAt(0);
-    int value = input.substring(1).toInt();
+    if (input.length() > 0) {
+      char command = input.charAt(0);
+      int value = input.substring(1).toInt();
 
-    if (command == 's' || command == 'S') {
-      // Set speed
-      if (value >= 0 && value <= 255) {
-        motorSpeed = value;
-        ledcWrite(PWM_CHANNEL, motorSpeed);
-        Serial.print("Speed set to: ");
-        Serial.println(motorSpeed);
+      if (command == 's' || command == 'S') {
+        // Set speed
+        if (value >= 0 && value <= 255) {
+          motorSpeed = value;
+          ledcWrite(PWM_CHANNEL, motorSpeed);
+          Serial.print("Speed set to: ");
+          Serial.println(motorSpeed);
+        } else {
+          Serial.println("Error: Speed must be 0-255");
+        }
+      } else if (command == 'd' || command == 'D') {
+        // Set direction
+        if (value == 0 || value == 1) {
+          motorDirection = (value == 1) ? HIGH : LOW;
+          digitalWrite(MOTOR_DIR_PIN, motorDirection);
+          Serial.print("Direction set to: ");
+          Serial.println(motorDirection == HIGH ? "HIGH (1)" : "LOW (0)");
+        } else {
+          Serial.println("Error: Direction must be 0 or 1");
+        }
       } else {
-        Serial.println("Error: Speed must be 0-255");
+        Serial.println("Unknown command. Use s<value> for speed or d<value> "
+                       "for direction");
       }
-    } else if (command == 'd' || command == 'D') {
-      // Set direction
-      if (value == 0 || value == 1) {
-        motorDirection = (value == 1) ? HIGH : LOW;
-        digitalWrite(MOTOR_DIR_PIN, motorDirection);
-        Serial.print("Direction set to: ");
-        Serial.println(motorDirection == HIGH ? "HIGH (1)" : "LOW (0)");
-      } else {
-        Serial.println("Error: Direction must be 0 or 1");
-      }
-    } else {
-      Serial.println("Unknown command. Use s<value> for speed or d<value> "
-                     "for direction");
     }
   }
-}
 
-  // if (dataready) {
-  //   Serial.print(encoder);
-  //   Serial.print(" , ");
-  //   Serial.print(pulseCount);
-  //   Serial.print(" , ");
-  //   Serial.println(rpm);
-  //   dataready = false;
-  // }
+  if (dataready) {
+    Serial.print(encoder);
+    Serial.print(" , ");
+    Serial.print(pulseCount);
+    Serial.print(" , ");
+    Serial.println(rpm);
+    dataready = false;
+  }
 }

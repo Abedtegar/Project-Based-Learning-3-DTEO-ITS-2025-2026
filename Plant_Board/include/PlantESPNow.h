@@ -2,79 +2,35 @@
 #define PLANT_ESPNOW_H
 
 #include <Arduino.h>
+#include <PlantConfig.h>
 #include <WiFi.h>
 #include <esp_now.h>
-#include <esp_wifi.h>
 
-// ========================================
-// DATA STRUCTURES - Harus sama dengan GameBoard!
-// ========================================
+#define MSG_DC_SPEED 10
+#define MSG_DC_KP 11
+#define MSG_DC_KI 12
+#define MSG_DC_KD 13
+#define MSG_DC_Setpoint 14
+#define MSG_DC_Control 15
+#define MSG_DC_Direction 16
 
-// Data yang dikirim ke GameBoard
-struct EscalatorDataPacket {
-  float currentSpeed; // RPM atau m/s
-  uint8_t direction;  // 0=forward, 1=reverse
-  uint8_t mode;       // 0=manual, 1=auto
-  float pidOutput;    // Output PID
-  bool isRunning;
-  unsigned long timestamp;
-};
 
-// Command yang diterima dari GameBoard
-struct EscalatorCommandPacket {
-  uint8_t commandType; // 0=set_mode, 1=set_speed, 2=set_pid, 3=set_direction
-  uint8_t mode;        // 0=manual, 1=auto
-  uint8_t direction;   // 0=forward, 1=reverse
-  float targetSpeed;
-  float pidKp;
-  float pidKi;
-  float pidKd;
-  float pidSetpoint;
-  unsigned long timestamp;
-};
+#define MSG_AC_SPEED 20
+#define MSG_AC_KP 21
+#define MSG_AC_KI 22
+#define MSG_AC_KD 23
+#define MSG_AC_Setpoint 24
+#define MSG_AC_Control 25
+#define MSG_AC_Voltage 26
+#define MSG_AC_Direction 27
 
-// ========================================
-// PLANT ESP-NOW MANAGER
-// ========================================
 
-class PlantESPNow {
-private:
-  uint8_t gameboardMAC[6];
-  bool espnowInitialized;
-  bool peerAdded;
 
-  // Callbacks
-  void (*onCommandReceived)(EscalatorCommandPacket cmd);
-  void (*onSendComplete)(bool success);
 
-  // Static instance untuk callback
-  static PlantESPNow *instance;
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
+void espnow_init();
+void sendData(float data);
+void receiveData(const uint8_t *mac_addr, const uint8_t *data, int len);
+void sendTaggedFloat(int32_t typeId, float value);
 
-  // ESP-NOW callbacks (static)
-  static void onDataRecv(const uint8_t *mac_addr, const uint8_t *data,
-                         int data_len);
-  static void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
-
-  void printMAC(const uint8_t *mac);
-
-public:
-  PlantESPNow();
-
-  // Initialization
-  bool begin();
-  bool setGameboardMAC(uint8_t mac[6]);
-  bool addGameboardPeer();
-
-  // Set callbacks
-  void onReceiveCommand(void (*callback)(EscalatorCommandPacket cmd));
-  void onSendStatus(void (*callback)(bool success));
-
-  // Send data
-  bool sendData(EscalatorDataPacket data);
-
-  // Status
-  bool isReady() const { return espnowInitialized && peerAdded; }
-  void printStatus();
-};
-
-#endif // PLANT_ESPNOW_H
+#endif

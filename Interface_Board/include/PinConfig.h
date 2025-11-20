@@ -1,6 +1,9 @@
 #ifndef PIN_CONFIG_H
 #define PIN_CONFIG_H
 
+// Ensure fixed-width integer types like uint8_t are available
+#include <Arduino.h>
+
 // ========================================
 // KONFIGURASI PIN - ESP32 & ESP8266 Compatible
 // File ini berisi deklarasi semua pin yang digunakan
@@ -93,7 +96,7 @@
 // ESP-NOW Configuration
 // MAC Address untuk komunikasi (sesuaikan dengan device kalian)
 // SignBox/Plant MAC Address
-#define PLANT_MAC {0x58, 0xBF, 0x25, 0x1A, 0xF7, 0x6C}
+static const uint8_t PLANT_MAC[6] = {0x58, 0xBF, 0x25, 0x1A, 0xF7, 0x6C};
 
 // Contoh MAC Address lainnya (uncomment jika diperlukan)
 // #define ESCALATOR_MAC {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01}

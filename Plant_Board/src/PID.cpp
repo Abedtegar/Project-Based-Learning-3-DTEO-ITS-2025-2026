@@ -23,6 +23,7 @@ float DCProportional = 0.0, DCIntegral = 0.0, DCDerivative = 0.0,
 float ACProportional = 0.0, ACIntegral = 0.0, ACDerivative = 0.0,
       ACintegralSum = 0.0;
 
+      
 float AC_PID(float setpoint, float measured, float dt) {
   float output = 0.0;
 
@@ -30,12 +31,14 @@ float AC_PID(float setpoint, float measured, float dt) {
 
   ACProportional = ACkP * ACError;
 
+  // Akumulasi error untuk integral term
   ACintegralSum += ACError * dt;
 
-  if (ACintegralSum > 500.0)
-    ACintegralSum = 500.0;
-  else if (ACintegralSum < -500.0)
-    ACintegralSum = -500.0;
+  // === ANTI-WINDUP: Clamp integral sum ===
+  if (ACintegralSum > AC_INTEGRAL_MAX)
+    ACintegralSum = AC_INTEGRAL_MAX;
+  else if (ACintegralSum < AC_INTEGRAL_MIN)
+    ACintegralSum = AC_INTEGRAL_MIN;
 
   ACIntegral = ACkI * ACintegralSum;
 
@@ -45,11 +48,11 @@ float AC_PID(float setpoint, float measured, float dt) {
 
   output = (ACProportional + ACIntegral + ACDerivative) * -1;
 
-  // Saturate output
-  if (output > 255.0)
-    output = 255.0;
-  else if (output < 0.0)
-    output = 0.0;
+  // === OUTPUT SATURATION ===
+  if (output > 4095.0)
+    output = 4095.0;
+  else if (output < 4095.0)
+    output = .0;
 
   return output;
 }
@@ -61,11 +64,14 @@ float DC_PID(float setpoint, float measured, float dt) {
 
   DCProportional = DCkP * DCError;
 
+  // Akumulasi error untuk integral term
   DCintegralSum += DCError * dt;
-  //   if (integralSum > MaxMotorSpeed)
-  //     integralSum = MaxMotorSpeed; // anti-windup
-  //   else if (integralSum < -MaxMotorSpeed)
-  //     integralSum = -MaxMotorSpeed;
+
+  // === ANTI-WINDUP: Clamp integral sum ===
+  if (DCintegralSum > DC_INTEGRAL_MAX)
+    DCintegralSum = DC_INTEGRAL_MAX;
+  else if (DCintegralSum < DC_INTEGRAL_MIN)
+    DCintegralSum = DC_INTEGRAL_MIN;
 
   DCIntegral = DCkI * DCintegralSum;
 
@@ -75,11 +81,12 @@ float DC_PID(float setpoint, float measured, float dt) {
 
   output = DCProportional + DCIntegral + DCDerivative;
 
-  // Saturate output
-  //   if (output > MaxMotorSpeed)
-  //     output = MaxMotorSpeed;
-  //   else if (output < -MaxMotorSpeed)
-  //     output = -MaxMotorSpeed;
+  // === OUTPUT SATURATION ===
+  // Batasi output untuk DC motor (asumsi range: -255 hingga 255)
+  if (output > 4095.0)
+    output = 4095.0;
+  else if (output < -4095.0)
+    output = -4095.0;
 
   return output;
 }

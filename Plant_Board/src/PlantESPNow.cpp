@@ -1,253 +1,140 @@
 #include "PlantESPNow.h"
+#include "DataStorage.h"
+#include "PID.h"
+#include "Plant.h"
+#include "PlantConfig.h"
 
-// Initialize static instance
-PlantESPNow *PlantESPNow::instance = nullptr;
-
-// ========================================
-// CONSTRUCTOR
-// ========================================
-
-PlantESPNow::PlantESPNow() {
-  espnowInitialized = false;
-  peerAdded = false;
-
-  memset(gameboardMAC, 0, 6);
-
-  onCommandReceived = nullptr;
-  onSendComplete = nullptr;
-
-  instance = this;
+bool DCMode = true;
+bool ACMode = false;
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  Serial.print("Status Pengiriman: ");
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sukses" : "Gagal");
 }
 
-// ========================================
-// INITIALIZATION
-// ========================================
-
-bool PlantESPNow::begin() {
-  Serial.println("[ESP-NOW] Initializing...");
-
-  // Set WiFi mode to STA
+void espnow_init() {
+  // Set WiFi mode sebelum inisialisasi ESP-NOW
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  delay(100); // Give time for WiFi to initialize
+  delay(100);
 
-  // Set WiFi channel to 1 (same as ESP8266 AP)
-  esp_wifi_set_promiscuous(true);
-  esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);
-
-  Serial.print("[ESP-NOW] Plant MAC Address: ");
-  Serial.println(WiFi.macAddress());
-  Serial.println("[ESP-NOW] WiFi Channel: 1");
-
-  // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
-    Serial.println("[ESP-NOW] Init Failed!");
-    return false;
+    Serial.println("Error initializing ESP-NOW");
+    return;
   }
-
-  espnowInitialized = true;
-  Serial.println("[ESP-NOW] Initialized Successfully");
 
   // Register callbacks
-  esp_now_register_recv_cb(onDataRecv);
-  esp_now_register_send_cb(onDataSent);
+  esp_now_register_recv_cb(receiveData);
+  esp_now_register_send_cb(OnDataSent);
 
-  return true;
+  // Tambahkan peer ESP8266 (Interface Board) untuk balasan
+  esp_now_peer_info_t peerInfo;
+  memset(&peerInfo, 0, sizeof(peerInfo));
+  memcpy(peerInfo.peer_addr, INTERFACE_MAC, 6);
+  peerInfo.channel = 0;
+  peerInfo.encrypt = false;
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+    Serial.println("Failed to add peer (INTERFACE)");
+    return;
+  }
+
+  Serial.println("ESP-NOW siap RX/TX (Plant Board).");
 }
 
-bool PlantESPNow::setGameboardMAC(uint8_t mac[6]) {
-  memcpy(gameboardMAC, mac, 6);
-  Serial.print("[ESP-NOW] GameBoard MAC set to: ");
-  printMAC(gameboardMAC);
-  return true;
+void sendData(float data) {
+  esp_now_send(INTERFACE_MAC, (uint8_t *)&data, sizeof(data)); // 4 byte
 }
 
-bool PlantESPNow::addGameboardPeer() {
-  // Check if MAC is valid
-  bool isEmpty = true;
-  for (int i = 0; i < 6; i++) {
-    if (gameboardMAC[i] != 0xFF && gameboardMAC[i] != 0x00) {
-      isEmpty = false;
+void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
+  if (len == 8) {
+    int32_t typeId;
+    float value;
+    memcpy(&typeId, &data[0], 4);
+    memcpy(&value, &data[4], 4);
+
+    switch (typeId) {
+
+    case MSG_DC_KP:
+      StoreData("pid_dc", "kP", value);
+      break;
+    case MSG_DC_KI:
+      StoreData("pid_dc", "kI", value);
+      break;
+    case MSG_DC_KD:
+      StoreData("pid_dc", "kD", value);
+      break;
+    case MSG_DC_Setpoint:
+      StoreData("pid_dc", "setpoint", value);
+      break;
+    case MSG_AC_KP:
+      StoreData("pid_ac", "kP", value);
+      break;
+    case MSG_AC_KI:
+      StoreData("pid_ac", "kI", value);
+      break;
+    case MSG_AC_KD:
+      StoreData("pid_ac", "kD", value);
+      break;
+    case MSG_AC_Setpoint:
+      StoreData("pid_ac", "setpoint", value);
+      break;
+    case MSG_DC_Control:
+      if (value == 1 && !DCMode) { 
+        DCintegralSum = 0;         
+        DCpreviousError = 0;
+      }
+      if (value == 1) {
+        DCMode = true;
+        ACMode = false;
+      } else if (value == 0) {
+        DCMode = false;
+        ACMode = false;
+      }
+      break;
+    case MSG_AC_Control:
+      if (value == 1) {
+        ACMode = true;
+        DCMode = false;
+      } else if (value == 0) {
+        ACMode = false;
+        DCMode = false;
+      }
+      break;
+    case MSG_AC_Voltage:
+      StoreData("pid_ac", "acvoltage", value);
+      break;
+    case MSG_DC_Direction:
+      if (value == 1) {
+        StoreData("pid_dc", "dcdirection", 1);
+      } else if (value == 0) {
+        StoreData("pid_dc", "dcdirection", 0);
+      }
+      break;
+
+    default:
+      Serial.print("RX TYPE ");
+      Serial.print(typeId);
+      Serial.print(": ");
       break;
     }
-  }
-
-  if (isEmpty) {
-    Serial.println("[ESP-NOW] ERROR: GameBoard MAC not set or invalid!");
-    Serial.println("[ESP-NOW] Please update INTERFACE_MAC in PlantConfig.h");
-    return false;
-  }
-
-  // Check if peer already exists
-  if (esp_now_is_peer_exist(gameboardMAC)) {
-    Serial.println("[ESP-NOW] Peer already exists");
-    peerAdded = true;
-    return true;
-  }
-
-  // Add peer
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, gameboardMAC, 6);
-  peerInfo.channel = 1; // Set to channel 1 to match ESP8266 AP
-  peerInfo.encrypt = false;
-  peerInfo.ifidx = WIFI_IF_STA; // Explicitly set interface
-
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("[ESP-NOW] Failed to add peer!");
-    return false;
-  }
-
-  Serial.println("[ESP-NOW] GameBoard peer added successfully");
-  Serial.println("[ESP-NOW] Peer channel: 1");
-  peerAdded = true;
-  return true;
-}
-
-// ========================================
-// CALLBACKS SETUP
-// ========================================
-
-void PlantESPNow::onReceiveCommand(
-    void (*callback)(EscalatorCommandPacket cmd)) {
-  onCommandReceived = callback;
-}
-
-void PlantESPNow::onSendStatus(void (*callback)(bool success)) {
-  onSendComplete = callback;
-}
-
-// ========================================
-// ESP-NOW STATIC CALLBACKS
-// ========================================
-
-void PlantESPNow::onDataRecv(const uint8_t *mac_addr, const uint8_t *data,
-                             int data_len) {
-  if (!instance)
+    Serial.print("ESPNOW RX VALUE: ");
+    Serial.println(value, 4);
     return;
-
-  Serial.print("[ESP-NOW] Data received from GameBoard, size: ");
-  Serial.println(data_len);
-
-  // Check if it's a command packet
-  if (data_len == sizeof(EscalatorCommandPacket)) {
-    EscalatorCommandPacket cmd;
-    memcpy(&cmd, data, sizeof(cmd));
-
-    Serial.println("[ESP-NOW] Command packet received:");
-    Serial.printf("  Type: %d\n", cmd.commandType);
-    Serial.printf("  Mode: %s\n", cmd.mode == 0 ? "MANUAL" : "AUTO");
-    Serial.printf("  Target Speed: %.2f\n", cmd.targetSpeed);
-
-    if (instance->onCommandReceived) {
-      instance->onCommandReceived(cmd);
-    }
-  } else {
-    Serial.println("[ESP-NOW] Unknown packet type");
   }
-}
 
-void PlantESPNow::onDataSent(const uint8_t *mac_addr,
-                             esp_now_send_status_t status) {
-  if (!instance)
+  if (len == 4) {
+    float v;
+    memcpy(&v, data, 4);
+    Serial.print("RX FLOAT (fallback): ");
+    Serial.println(v, 4);
     return;
-
-  bool success = (status == ESP_NOW_SEND_SUCCESS);
-
-  // Simplified logging
-  if (!success) {
-    Serial.println("[ESP-NOW] Send FAILED");
   }
 
-  if (instance->onSendComplete) {
-    instance->onSendComplete(success);
-  }
+  Serial.print("Panjang data tidak sesuai: ");
+  Serial.println(len);
 }
 
-// ========================================
-// SEND DATA
-// ========================================
-
-bool PlantESPNow::sendData(EscalatorDataPacket data) {
-  if (!espnowInitialized) {
-    Serial.println("[ESP-NOW] ERROR: Not initialized!");
-    return false;
-  }
-
-  if (!peerAdded) {
-    Serial.println("[ESP-NOW] ERROR: Peer not added!");
-    return false;
-  }
-
-  data.timestamp = millis();
-
-  esp_err_t result = esp_now_send(gameboardMAC, (uint8_t *)&data, sizeof(data));
-
-  if (result == ESP_OK) {
-    return true;
-  } else {
-    // Only print detailed error occasionally to avoid spam
-    static unsigned long lastErrorPrint = 0;
-    if (millis() - lastErrorPrint > 1000) {
-      Serial.print("[ESP-NOW] Send error code: ");
-      Serial.print(result);
-
-      // Decode error
-      switch (result) {
-      case ESP_ERR_ESPNOW_NOT_INIT:
-        Serial.println(" - ESP-NOW not initialized");
-        break;
-      case ESP_ERR_ESPNOW_ARG:
-        Serial.println(" - Invalid argument");
-        break;
-      case ESP_ERR_ESPNOW_INTERNAL:
-        Serial.println(" - Internal error");
-        break;
-      case ESP_ERR_ESPNOW_NO_MEM:
-        Serial.println(" - Out of memory");
-        break;
-      case ESP_ERR_ESPNOW_NOT_FOUND:
-        Serial.println(" - Peer not found");
-        Serial.print("   Target MAC: ");
-        printMAC(gameboardMAC);
-        break;
-      case ESP_ERR_ESPNOW_IF:
-        Serial.println(" - WiFi interface mismatch");
-        break;
-      default:
-        Serial.println(" - Unknown error");
-        break;
-      }
-      lastErrorPrint = millis();
-    }
-    return false;
-  }
-}
-
-// ========================================
-// UTILITY
-// ========================================
-
-void PlantESPNow::printMAC(const uint8_t *mac) {
-  for (int i = 0; i < 6; i++) {
-    Serial.printf("%02X", mac[i]);
-    if (i < 5)
-      Serial.print(":");
-  }
-  Serial.println();
-}
-
-void PlantESPNow::printStatus() {
-  Serial.println("\n========================================");
-  Serial.println("PLANT ESP-NOW STATUS");
-  Serial.println("========================================");
-  Serial.print("ESP-NOW Initialized: ");
-  Serial.println(espnowInitialized ? "YES" : "NO");
-  Serial.print("Peer Added: ");
-  Serial.println(peerAdded ? "YES" : "NO");
-  Serial.print("GameBoard MAC: ");
-  printMAC(gameboardMAC);
-  Serial.print("Ready to Send: ");
-  Serial.println(isReady() ? "YES" : "NO");
-  Serial.println("========================================\n");
+void sendTaggedFloat(int32_t typeId, float value) {
+  uint8_t buf[8];
+  memcpy(&buf[0], &typeId, 4);
+  memcpy(&buf[4], &value, 4);
+  esp_now_send(INTERFACE_MAC, buf, sizeof(buf));
 }

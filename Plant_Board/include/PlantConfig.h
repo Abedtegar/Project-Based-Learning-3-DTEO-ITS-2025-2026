@@ -1,5 +1,7 @@
 #ifndef PLANT_CONFIG_H
 #define PLANT_CONFIG_H
+#include <cstdint>
+
 
 // ========================================
 // PIN CONFIGURATION PLANT BOARD
@@ -37,25 +39,19 @@
 #define LED_DC_CONTROL 18
 #define LED_AC_CONTROL 5
 
-// PWM Settings
-#define LEDC_CHANNEL 0  // Channel PWM (0–15)
-#define LEDC_TIMER 0    // Timer (0–3)
-#define LEDC_FREQ 10000 // Frekuensi PWM (Hz)
-#define LEDC_RES 12     // Resolusi PWM (bit) → 12 bit = 0–4095
 
 // Serial
 #define SERIAL_BAUD 115200
 #define TX_ENABLE_PIN 4
 //
-#define PID_INTERVAL 5 // ms
 // ========================================
 // NETWORK CONFIGURATION
 // ========================================
 
 // Interface MAC Address (sesuaikan dengan MAC Interface Anda)
 // Cek di Serial Monitor Interface saat startup
-#define INTERFACE_MAC                                                          \
-  {0x50, 0x02, 0x91, 0x78, 0x72, 0xA7} // MAC dari Interface_Board ESP8266
+static const uint8_t INTERFACE_MAC[] = {
+    0x50, 0x02, 0x91, 0x78, 0x72, 0xA7}; // MAC dari Interface_Board ESP8266
 
 // Data sending interval
 #define DATA_SEND_INTERVAL 1000 // Send data setiap 10ms

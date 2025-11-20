@@ -4,17 +4,21 @@
 #include <Arduino.h>
 
 // DC
+
+extern bool DCMode;
 extern volatile long DCencoder;
 extern volatile long DClastEncoder;
 extern volatile float DCrpm;
 extern volatile long DCpulseCount;
 extern volatile bool DCDirection;
 
+extern bool ACMode;
+extern int ACMotorControlMode;
+extern bool ACVoltage;
+
 extern volatile unsigned long ACencoder;
 extern volatile float ACrpm;
 extern volatile bool ACDirection;
-extern volatile bool ACVoltage;
-extern volatile int ACMotorControlMode;
 
 // Deklarasi fungsi
 void DCinitEncoder();                            // setup encoder DC
@@ -31,7 +35,8 @@ float ACgetRPM();          // dapatkan RPM AC
 long ACgetEncoderCount();  // dapatkan jumlah encoder AC
 void ACresetEncoder();     // reset encoder AC
 void ACprintEncoderData(); // cetak data encoder AC
-void ACmotorControl(bool direction, long speed, bool voltage,int mode); // kontrol motor AC
+void ACmotorControl(bool direction, long speed, bool voltage,
+                    int mode); // kontrol motor AC
 void ACstartMotorTimer();      // mulai timer motor DC
 void ACstartEncoderTimer();
 #endif

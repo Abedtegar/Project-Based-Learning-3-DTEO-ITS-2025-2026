@@ -1,5 +1,7 @@
 #include "Plant.h"
 #include "PID.h"
+#include "PlantESPNow.h"
+#include <DataStorage.h>
 #include <PlantConfig.h>
 
 // Definisi variabel global
@@ -17,6 +19,10 @@ volatile unsigned long ACencoder;
 volatile float ACrpm;
 volatile bool ACnewDataReady = false;
 
+// Definisi variabel AC yang sebelumnya hanya extern
+bool ACVoltage = false;
+int ACMotorControlMode = 0;
+
 // Variable internal
 static hw_timer_t *a_timer = NULL;
 static hw_timer_t *m_timer = NULL;
@@ -25,7 +31,7 @@ static portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // ISR Handler
 void IRAM_ATTR DConTimer() {
-  if (DCPID) {
+  if (DCMode) {
     portENTER_CRITICAL_ISR(&timerMux);
     DCpulseCount = DCencoder - DClastEncoder;
     DClastEncoder = DCencoder;
@@ -33,18 +39,25 @@ void IRAM_ATTR DConTimer() {
     DCsignalPWM = DC_PID(DCsetpoint, DCrpm, DCREAD_INTERVAL / 1000.0);
     DCmotorControl(DCDirection, DCsignalPWM);
     DCnewDataReady = true;
+    sendTaggedFloat(MSG_DC_SPEED, DCrpm);
     portEXIT_CRITICAL_ISR(&timerMux);
+  }else{
+    DCmotorControl(0, 0);
   }
 }
 
 void IRAM_ATTR AConTimer() {
-  if (ACPID) {
+  if (ACMode) {
     portENTER_CRITICAL_ISR(&timerMux);
     ACsignalPWM = AC_PID(ACsetpoint, ACgetRPM(), ACREAD_INTERVAL / 1000.0);
-    ACmotorControl(true, ACsignalPWM, true, 1);
+    ACmotorControl(true, ACsignalPWM, ACVoltage, ACMode);
     ACnewDataReady = true;
+    sendTaggedFloat(MSG_AC_SPEED, ACrpm);
     portEXIT_CRITICAL_ISR(&timerMux);
+  }else{
+    ACmotorControl(false, 0, ACVoltage, ACMode);
   }
+  
 }
 
 void IRAM_ATTR DChandleEncoderA() {
@@ -170,14 +183,13 @@ void ACstartEncoderTimer() {
 void ACstartMotorTimer() {
   ledcSetup(ACPWM_CHANNEL, ACPWM_FREQ, ACPWM_RESOLUTION);
   ledcAttachPin(AC_DAC2_PIN, ACPWM_CHANNEL);
-  ledcWrite(ACPWM_CHANNEL, 0); // speed 0 - 255
+  ledcWrite(ACPWM_CHANNEL, 0);
 }
 float ACgetRPM() {
   ACencoder = analogRead(AC_ENCODER_PIN);
   ACrpm = (ACencoder / 4095.0) * 100;
   return ACrpm;
 }
-
 
 void ACprintEncoderData() {
 
@@ -204,13 +216,14 @@ void ACprintEncoderData() {
 void ACmotorControl(bool direction, long speed, bool voltage, int mode) {
   int dacspeed = constrain(speed, 0, 255);
   digitalWrite(AC_DAC_VOLTAGE_SELECT_PIN, voltage);
-
   switch (mode) {
   case 0:
-    ledcWrite(ACPWM_CHANNEL, speed);
+    dacWrite(AC_DAC1_PIN, dacspeed);
+
     break;
   case 1:
-    dacWrite(AC_DAC1_PIN, dacspeed);
+    ledcWrite(ACPWM_CHANNEL, speed);
+
     break;
   case 2:
     break;
@@ -218,6 +231,7 @@ void ACmotorControl(bool direction, long speed, bool voltage, int mode) {
 }
 
 void DCmotorControl(bool direction, long speed) {
-  ledcWrite(PWM_CHANNEL, speed);
+  long var_speed = constrain(speed, 0, 4095);
   digitalWrite(MOTOR_DIR_PIN, direction);
+  ledcWrite(PWM_CHANNEL, abs(var_speed));
 }

@@ -1,205 +1,161 @@
 #include "EncoderControl.h"
+#include "PinConfig.h"
+volatile bool DCswitch;
+volatile long DCencoder = 0;
+volatile long DClastEncoder = 0;
+volatile bool DCDirection;
+static volatile unsigned long DCswitchLastISR = 0;
 
-// Initialize static instance pointer
-EncoderControl *EncoderControl::instance = nullptr;
+// Encoder mode (UP atau DOWN)
+static EncoderMode encoderMode = ENCODER_UP;
 
-// ========================================
-// CONSTRUCTOR
-// ========================================
+void IRAM_ATTR DChandleEncoder() {
+  // Hanya hitung pulsa dari DT falling edge
+  // Arah ditentukan oleh mode, bukan kombinasi CLK/DT
 
-EncoderControl::EncoderControl(int clkPin, int dtPin, int swPin) {
-  pinCLK = clkPin;
-  pinDT = dtPin;
-  pinSW = swPin;
-
-  encoderPos = 0;
-  lastEncoded = 0;
-  buttonPressed = false;
-  lastInterruptTime = 0;
-
-  lastButtonPress = 0;
-  lastButtonRelease = 0;
-  buttonPressTime = 0;
-  debounceDelay = 50;       // 50ms debounce
-  longPressThreshold = 800; // 800ms untuk long press
-  lastButtonState = HIGH;
-  buttonHandled = false;
-
-  onRotateCallback = nullptr;
-  onClickCallback = nullptr;
-  onLongPressCallback = nullptr;
-
-  // Set static instance untuk ISR
-  instance = this;
-}
-
-// ========================================
-// INITIALIZATION
-// ========================================
-
-void EncoderControl::begin() {
-  // Setup pins
-  pinMode(pinCLK, INPUT_PULLUP);
-  pinMode(pinDT, INPUT_PULLUP);
-  pinMode(pinSW, INPUT_PULLUP);
-
-  // Small delay to stabilize
-  delay(10);
-
-  // Attach interrupts - only on CLK for simpler detection
-  attachInterrupt(digitalPinToInterrupt(pinCLK), handleEncoderISR, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pinSW), handleButtonISR, CHANGE);
-}
-
-// ========================================
-// INTERRUPT SERVICE ROUTINES
-// ========================================
-
-void IRAM_ATTR EncoderControl::handleEncoderISR() {
-  if (!instance)
-    return;
-
-  // Debounce - ignore interrupts too close together (increased to 2ms)
-  unsigned long LEDCurrentTime = millis();
-  if (LEDCurrentTime - instance->lastInterruptTime < 2) {
-    return;
+  if (encoderMode == ENCODER_UP) {
+    DCencoder++;
+    DCDirection = true;
+  } else {
+    DCencoder--;
+    DCDirection = false;
   }
 
-  // Read current state
-  int clkState = digitalRead(instance->pinCLK);
-  int dtState = digitalRead(instance->pinDT);
+  // JANGAN gunakan Serial.print dalam ISR!
+}
 
-  // Simple logic: only process on CLK falling edge
-  // This reduces false triggers significantly
-  static int lastCLK = HIGH;
+void IRAM_ATTR DChandleEncoderSW() {
+  // ISR untuk switch - TIDAK DIGUNAKAN
+  // Karena tidak semua pin ESP32 support interrupt eksternal dengan baik
+  // Gunakan polling di main loop untuk switch lebih reliable
+}
 
-  if (lastCLK == HIGH && clkState == LOW) {
-    // CLK went from HIGH to LOW (falling edge)
-    // Check DT to determine direction
-    if (dtState == HIGH) {
-      instance->encoderPos++; // Clockwise
-    } else {
-      instance->encoderPos--; // Counter-clockwise
-    }
-    instance->lastInterruptTime = LEDCurrentTime;
+void DCinitEncoder() {
+  pinMode(ENCODER_CLK, INPUT_PULLUP);
+  pinMode(ENCODER_DT, INPUT_PULLUP);
+  pinMode(ENCODER_SW, INPUT_PULLUP);
+
+  DCencoder = 0;
+  DClastEncoder = 0;
+  DCswitchLastISR = 0;
+  DCDirection = false;
+
+  // HANYA attach interrupt ke DT dengan FALLING edge
+  // Jangan attach ke CLK - akan menyebabkan double trigger!
+  attachInterrupt(digitalPinToInterrupt(ENCODER_DT), DChandleEncoder, FALLING);
+  // TIDAK attach interrupt ke SW - gunakan polling untuk lebih reliable
+  // attachInterrupt(digitalPinToInterrupt(ENCODER_SW), DChandleEncoderSW,
+  // CHANGE);
+
+  Serial.println("Encoder initialized");
+  Serial.print("CLK Pin: ");
+  Serial.println(ENCODER_CLK);
+  Serial.print("DT Pin: ");
+  Serial.println(ENCODER_DT);
+  Serial.print("SW Pin: ");
+  Serial.println(ENCODER_SW);
+}
+
+long DCgetEncoderCount() { return DCencoder; }
+
+bool DCgetSwitchState() { return digitalRead(ENCODER_SW); }
+
+bool DCgetDirection() { return DCDirection; }
+
+EncoderMode getEncoderMode() { return encoderMode; }
+
+void toggleEncoderMode() {
+  if (encoderMode == ENCODER_UP) {
+    encoderMode = ENCODER_DOWN;
+    Serial.println("[Encoder Mode] DOWN");
+  } else {
+    encoderMode = ENCODER_UP;
+    Serial.println("[Encoder Mode] UP");
   }
-
-  lastCLK = clkState;
 }
 
-void IRAM_ATTR EncoderControl::handleButtonISR() {
-  if (!instance)
-    return;
+bool buttonPressed() { return (digitalRead(ENCODER_SW) == LOW); }
 
-  // Simple flag, debouncing handled in update()
-  instance->buttonPressed = !digitalRead(instance->pinSW);
-}
+ButtonClick getButtonClick() {
+  static unsigned long pressStartTime = 0;
+  static unsigned long releaseTime = 0;
+  static bool wasPressed = false;
+  static bool longPressTriggered = false;
+  static int clickCount = 0;
 
-// ========================================
-// CALLBACK SETTERS
-// ========================================
+  const unsigned long LONG_PRESS_TIME = 1000; // 1 detik untuk long press
+  const unsigned long DOUBLE_CLICK_TIME =
+      400;                                // 400ms window untuk double click
+  const unsigned long DEBOUNCE_TIME = 50; // 50ms debounce
 
-void EncoderControl::onRotate(void (*callback)(int direction)) {
-  onRotateCallback = callback;
-}
+  bool isPressed = buttonPressed();
+  unsigned long now = millis();
 
-void EncoderControl::onClick(void (*callback)()) { onClickCallback = callback; }
-
-void EncoderControl::onLongPress(void (*callback)()) {
-  onLongPressCallback = callback;
-}
-
-// ========================================
-// UPDATE FUNCTION (call in loop)
-// ========================================
-
-void EncoderControl::update() {
-  // Check for rotation with threshold to reduce jitter
-  static int lastReportedPos = 0;
-  static unsigned long lastRotateReport = 0;
-
-  int posDiff = encoderPos - lastReportedPos;
-
-  // Only report if position changed AND enough time has passed (debounce in
-  // software)
-  if (posDiff != 0 && millis() - lastRotateReport > 10) {
-    int direction = (posDiff > 0) ? 1 : -1;
-
-    // Call callback
-    if (onRotateCallback) {
-      onRotateCallback(direction);
+  // Deteksi button press (transisi LOW)
+  if (isPressed && !wasPressed) {
+    if (now - releaseTime < DEBOUNCE_TIME) {
+      // Bounce, abaikan
+      wasPressed = isPressed;
+      return CLICK_NONE;
     }
 
-    lastReportedPos = encoderPos;
-    lastRotateReport = millis();
+    pressStartTime = now;
+    longPressTriggered = false;
+    clickCount++;
+
+    wasPressed = true;
   }
 
-  // Check button state dengan debouncing
-  bool currentButtonState = !digitalRead(pinSW); // LOW when pressed (pullup)
-  unsigned long LEDCurrentTime = millis();
-
-  if (currentButtonState != lastButtonState) {
-    if (currentButtonState) {
-      // Button just pressed
-      if (LEDCurrentTime - lastButtonRelease > debounceDelay) {
-        buttonPressTime = LEDCurrentTime;
-        lastButtonPress = LEDCurrentTime;
-        buttonHandled = false;
-      }
-    } else {
-      // Button just released
-      if (LEDCurrentTime - lastButtonPress > debounceDelay) {
-        lastButtonRelease = LEDCurrentTime;
-
-        unsigned long pressDuration = LEDCurrentTime - buttonPressTime;
-
-        if (!buttonHandled) {
-          if (pressDuration >= longPressThreshold) {
-            // Long press detected
-            if (onLongPressCallback) {
-              onLongPressCallback();
-            }
-          } else if (pressDuration > debounceDelay) {
-            // Short click detected
-            if (onClickCallback) {
-              onClickCallback();
-            }
-          }
-          buttonHandled = true;
-        }
-      }
-    }
-
-    lastButtonState = currentButtonState;
-  } else if (currentButtonState && !buttonHandled) {
-    // Button is being held
-    unsigned long pressDuration = LEDCurrentTime - buttonPressTime;
-
-    if (pressDuration >= longPressThreshold) {
-      // Long press threshold reached while holding
-      if (onLongPressCallback) {
-        onLongPressCallback();
-      }
-      buttonHandled = true;
+  // Deteksi long press saat masih ditekan
+  if (isPressed && !longPressTriggered) {
+    if (now - pressStartTime >= LONG_PRESS_TIME) {
+      longPressTriggered = true;
+      clickCount = 0;
+      wasPressed = isPressed;
+      Serial.println("[Button] LONG PRESS");
+      return CLICK_LONG;
     }
   }
-}
 
-// ========================================
-// MANUAL READ FUNCTIONS
-// ========================================
+  // Deteksi button release (transisi HIGH)
+  if (!isPressed && wasPressed) {
+    releaseTime = now;
+    wasPressed = false;
 
-int EncoderControl::readRotation() {
-  static int lastPos = 0;
-  int currentPos = encoderPos;
-
-  if (currentPos != lastPos) {
-    int direction = (currentPos > lastPos) ? 1 : -1;
-    lastPos = currentPos;
-    return direction;
+    // Jika long press sudah trigger, reset
+    if (longPressTriggered) {
+      clickCount = 0;
+      return CLICK_NONE;
+    }
   }
 
-  return 0;
+  // Evaluasi click setelah timeout double click
+  if (clickCount > 0 && !isPressed &&
+      (now - releaseTime >= DOUBLE_CLICK_TIME)) {
+    ButtonClick result = CLICK_NONE;
+
+    if (clickCount == 1) {
+      result = CLICK_SINGLE;
+      Serial.println("[Button] SINGLE CLICK");
+    } else if (clickCount >= 2) {
+      result = CLICK_DOUBLE;
+      Serial.println("[Button] DOUBLE CLICK");
+    }
+
+    clickCount = 0;
+    return result;
+  }
+
+  return CLICK_NONE;
 }
 
-bool EncoderControl::readButton() { return !digitalRead(pinSW); }
+// Backward compatibility
+bool buttonLongPress() { return (getButtonClick() == CLICK_LONG); }
+
+bool newscroll() {
+  if (DClastEncoder != DCencoder) {
+    DClastEncoder = DCencoder;
+    return true;
+  }
+  return false;
+}

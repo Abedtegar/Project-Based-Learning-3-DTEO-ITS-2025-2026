@@ -3,67 +3,34 @@
 
 #include <Arduino.h>
 
-// ========================================
-// ROTARY ENCODER CONTROL CLASS
-// Untuk encoder 2 channel (CLK, DT) + Switch
-// ========================================
-
-class EncoderControl {
-private:
-  // Pin definitions
-  int pinCLK;
-  int pinDT;
-  int pinSW;
-
-  // Encoder state
-  volatile int encoderPos;
-  volatile int lastEncoded;
-  volatile bool buttonPressed;
-  volatile unsigned long lastInterruptTime;
-
-  // Button debouncing
-  unsigned long lastButtonPress;
-  unsigned long lastButtonRelease;
-  unsigned long buttonPressTime;
-  unsigned long debounceDelay;
-  unsigned long longPressThreshold;
-  bool lastButtonState;
-  bool buttonHandled;
-
-  // Callbacks
-  void (*onRotateCallback)(int direction);
-  void (*onClickCallback)();
-  void (*onLongPressCallback)();
-
-  // Static instance untuk ISR
-  static EncoderControl *instance;
-
-  // ISR handlers - Use IRAM_ATTR for both platforms
-  static void IRAM_ATTR handleEncoderISR();
-  static void IRAM_ATTR handleButtonISR();
-
-public:
-  EncoderControl(int clkPin, int dtPin, int swPin);
-
-  // Initialization
-  void begin();
-
-  // Set callbacks
-  void onRotate(void (*callback)(int direction));
-  void onClick(void (*callback)());
-  void onLongPress(void (*callback)());
-
-  // Update function (call in loop)
-  void update();
-
-  // Getters
-  int getPosition() const { return encoderPos; }
-  void resetPosition() { encoderPos = 0; }
-  bool isButtonPressed() const { return buttonPressed; }
-
-  // Manual read (non-interrupt mode)
-  int readRotation();
-  bool readButton();
+// Button click types
+enum ButtonClick {
+  CLICK_NONE = 0,
+  CLICK_SINGLE = 1,
+  CLICK_DOUBLE = 2,
+  CLICK_LONG = 3
 };
 
-#endif // ENCODER_CONTROL_H
+// Encoder mode
+enum EncoderMode { ENCODER_UP = 0, ENCODER_DOWN = 1 };
+
+extern volatile long DCencoder;
+extern volatile long DClastEncoder;
+extern volatile bool DCDirection;
+extern volatile bool DCswitch;
+extern bool scroll;
+
+void DCinitEncoder();     // setup encoder DC
+long DCgetEncoderCount(); // dapatkan jumlah encoder DC
+bool DCgetSwitchState();  // dapatkan status switch encoder
+bool DCgetDirection();    // dapatkan arah putaran encoder (deprecated, gunakan
+                          // mode)
+EncoderMode getEncoderMode(); // dapatkan mode encoder (UP/DOWN)
+void toggleEncoderMode();     // toggle mode encoder
+
+// Button detection functions
+ButtonClick getButtonClick(); // deteksi jenis klik (single/double/long)
+bool buttonPressed();         // cek apakah tombol encoder ditekan
+bool buttonLongPress();       // deprecated - gunakan getButtonClick()
+bool newscroll();
+#endif
