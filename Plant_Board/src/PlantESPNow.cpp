@@ -3,23 +3,38 @@
 #include "PID.h"
 #include "Plant.h"
 #include "PlantConfig.h"
-
+#include <LedControl.h>
 bool DCMode = true;
 bool ACMode = false;
+bool PIDMODE = false;
+bool espnowReady = false;
+
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  Serial.print("Status Pengiriman: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sukses" : "Gagal");
+  // Serial.print("Status Pengiriman: ");
+  // Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sukses" : "Gagal");
+  if (status == ESP_NOW_SEND_SUCCESS) {
+    setLedState(LED_WIFI, true);
+  } else {
+    setLedState(LED_WIFI, false);
+  }
 }
 
 void espnow_init() {
   // Set WiFi mode sebelum inisialisasi ESP-NOW
+  Serial.println("espnow: set wifi mode to STA");
   WiFi.mode(WIFI_STA);
   delay(100);
 
-  if (esp_now_init() != ESP_OK) {
+  Serial.println("espnow: calling esp_now_init");
+  esp_err_t rc = esp_now_init();
+  if (rc != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
     return;
   }
+  Serial.println("espnow: esp_now_init ok");
+
+  Serial.print("ESP-NOW MAC Address: ");
+  Serial.println(WiFi.macAddress());
 
   // Register callbacks
   esp_now_register_recv_cb(receiveData);
@@ -31,11 +46,15 @@ void espnow_init() {
   memcpy(peerInfo.peer_addr, INTERFACE_MAC, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+  esp_err_t peerRes = esp_now_add_peer(&peerInfo);
+  if (peerRes != ESP_OK) {
+
     Serial.println("Failed to add peer (INTERFACE)");
     return;
   }
+  Serial.println("espnow: peer added");
 
+  espnowReady = true;
   Serial.println("ESP-NOW siap RX/TX (Plant Board).");
 }
 
@@ -77,25 +96,29 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       StoreData("pid_ac", "setpoint", value);
       break;
     case MSG_DC_Control:
-      if (value == 1 && !DCMode) { 
-        DCintegralSum = 0;         
+      if (value == 1 && !DCMode) {
+        DCintegralSum = 0;
         DCpreviousError = 0;
       }
       if (value == 1) {
         DCMode = true;
         ACMode = false;
+        setLedState(LED_DC_CONTROL, true);
       } else if (value == 0) {
         DCMode = false;
         ACMode = false;
+        setLedState(LED_DC_CONTROL, false);
       }
       break;
     case MSG_AC_Control:
       if (value == 1) {
         ACMode = true;
         DCMode = false;
+        setLedState(LED_AC_CONTROL, true);
       } else if (value == 0) {
         ACMode = false;
         DCMode = false;
+        setLedState(LED_AC_CONTROL, false);
       }
       break;
     case MSG_AC_Voltage:
@@ -109,13 +132,29 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       }
       break;
 
-    default:
+    case MSG_PID_MODE:
+      UpdatePIDParam();
+      if (value == 1) {
+        PIDMODE = true;
+        setLedState(LED_PID, true);
+      } else if (value == 0) {
+        PIDMODE = false;
+        setLedState(LED_PID, false);
+      }
+      break;
+      case ESP_RESTART:
+      if (value == 1)
+      ESP.restart();
+      break;
+      default:
       Serial.print("RX TYPE ");
       Serial.print(typeId);
       Serial.print(": ");
       break;
     }
-    Serial.print("ESPNOW RX VALUE: ");
+    Serial.print("type id: ");
+    Serial.print(typeId);
+    Serial.print(" || ESPNOW RX VALUE: ");
     Serial.println(value, 4);
     return;
   }
@@ -133,6 +172,8 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
 }
 
 void sendTaggedFloat(int32_t typeId, float value) {
+  if (!espnowReady)
+    return;
   uint8_t buf[8];
   memcpy(&buf[0], &typeId, 4);
   memcpy(&buf[4], &value, 4);

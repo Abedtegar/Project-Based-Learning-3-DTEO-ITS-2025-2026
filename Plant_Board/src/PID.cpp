@@ -1,29 +1,30 @@
 #include "PID.h"
+#include "PlantESPNow.h"
 #include <PlantConfig.h>
 
-volatile double DCpreviousError = 0.0;
-volatile double DCerrorSum = 0.0;
-volatile double DCError = 0.0;
-volatile double DCsignalPWM = 0.0;
-volatile double DCkP = 1.5;
-volatile double DCkI = 0.1;
-volatile double DCkD = 0.05;
-volatile double DCsetpoint = 50.0;
 
-volatile double ACpreviousError = 0.0;
-volatile double ACerrorSum = 0.0;
-volatile double ACError = 0.0;
-volatile double ACsignalPWM = 0.0;
-volatile double ACkP = 2.0;
-volatile double ACkI = 0.08;
-volatile double ACkD = 0.04;
-volatile double ACsetpoint = 0.0;
+volatile float DCpreviousError = 0.0f;
+volatile float DCerrorSum = 0.0f;
+volatile float DCError = 0.0f;
+volatile float DCsignalPWM = 0.0f;
+volatile float DCkP = 1.5f;
+volatile float DCkI = 0.1f;
+volatile float DCkD = 0.05f;
+volatile float DCsetpoint = 50.0f;
+
+volatile float ACpreviousError = 0.0f;
+volatile float ACerrorSum = 0.0f;
+volatile float ACError = 0.0f;
+volatile float ACsignalPWM = 0.0f;
+volatile float ACkP = 2.0f;
+volatile float ACkI = 0.08f;
+volatile float ACkD = 0.04f;
+volatile float ACsetpoint = 0.0f;
 float DCProportional = 0.0, DCIntegral = 0.0, DCDerivative = 0.0,
       DCintegralSum = 0.0;
 float ACProportional = 0.0, ACIntegral = 0.0, ACDerivative = 0.0,
       ACintegralSum = 0.0;
 
-      
 float AC_PID(float setpoint, float measured, float dt) {
   float output = 0.0;
 
@@ -89,4 +90,31 @@ float DC_PID(float setpoint, float measured, float dt) {
     output = -4095.0;
 
   return output;
+}
+
+void UpdatePIDParam() {
+  sendTaggedFloat(MSG_DC_KP, DCkP);
+  Serial.print("DCkP terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_DC_KI, DCkI);
+  Serial.print("DCkI terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_DC_KD, DCkD);
+  Serial.print("DCkD terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_DC_Setpoint, DCsetpoint);
+  Serial.print("DCsetpoint terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_AC_KP, ACkP);
+  Serial.print("ACkP terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_AC_KI, ACkI);
+  Serial.print("ACkI terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_AC_KD, ACkD);
+  Serial.print("ACkD terkirim ");
+  delay(10);
+  sendTaggedFloat(MSG_AC_Setpoint, ACsetpoint);
+  Serial.print("ACsetpoint terkirim ");
+  delay(10);
 }

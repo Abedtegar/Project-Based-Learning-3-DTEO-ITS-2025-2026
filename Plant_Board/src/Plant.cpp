@@ -8,6 +8,7 @@
 volatile long DCencoder = 0;
 volatile long DClastEncoder = 0;
 volatile float DCrpm = 0;
+volatile float DCGearboxRPM = 0;
 volatile long DCpulseCount = 0;
 volatile bool DCnewDataReady = false;
 static int DClastStateA = LOW;
@@ -27,37 +28,46 @@ int ACMotorControlMode = 0;
 static hw_timer_t *a_timer = NULL;
 static hw_timer_t *m_timer = NULL;
 
-static portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+volatile float RPM_FACTOR = 60000.0 / DCREAD_INTERVAL/PPR;
+
+                            static portMUX_TYPE timerMux =
+                                portMUX_INITIALIZER_UNLOCKED;
 
 // ISR Handler
 void IRAM_ATTR DConTimer() {
-  if (DCMode) {
+  if (DCMode && PIDMODE) {
     portENTER_CRITICAL_ISR(&timerMux);
     DCpulseCount = DCencoder - DClastEncoder;
     DClastEncoder = DCencoder;
-    DCrpm = (DCpulseCount * 6000.0 / DCREAD_INTERVAL) / PPR;
+    DCrpm = (DCpulseCount * RPM_FACTOR);
+    DCGearboxRPM = DCrpm / 50.0; // Assuming a gearbox ratio of 50:1
     DCsignalPWM = DC_PID(DCsetpoint, DCrpm, DCREAD_INTERVAL / 1000.0);
     DCmotorControl(DCDirection, DCsignalPWM);
     DCnewDataReady = true;
-    sendTaggedFloat(MSG_DC_SPEED, DCrpm);
+    // Don't call ESP-NOW from ISR - do it in main loop instead
     portEXIT_CRITICAL_ISR(&timerMux);
-  }else{
+  } else if (DCMode && !PIDMODE) {
+    DCmotorControl(DCDirection, map(DCsetpoint, 0, 100, 0, 4095));
+    DCnewDataReady = true;
+  } else {
     DCmotorControl(0, 0);
   }
 }
 
 void IRAM_ATTR AConTimer() {
-  if (ACMode) {
+  if (ACMode && PIDMODE) {
     portENTER_CRITICAL_ISR(&timerMux);
     ACsignalPWM = AC_PID(ACsetpoint, ACgetRPM(), ACREAD_INTERVAL / 1000.0);
     ACmotorControl(true, ACsignalPWM, ACVoltage, ACMode);
     ACnewDataReady = true;
-    sendTaggedFloat(MSG_AC_SPEED, ACrpm);
+    // Don't call ESP-NOW from ISR - do it in main loop instead
     portEXIT_CRITICAL_ISR(&timerMux);
-  }else{
+  } else if (ACMode && !PIDMODE) {
+    ACmotorControl(true, map(ACsetpoint, 0, AC_MAX_RPM, 0, 4095), ACVoltage, ACMode);
+    ACnewDataReady = true;
+  } else {
     ACmotorControl(false, 0, ACVoltage, ACMode);
   }
-  
 }
 
 void IRAM_ATTR DChandleEncoderA() {
@@ -146,26 +156,44 @@ void DCprintEncoderData() {
     float currentRpm = DCrpm;
     DCnewDataReady = false;
     portEXIT_CRITICAL(&timerMux);
-
-    Serial.print("Encoder: ");
+    // Serial.print(currentRpm);
+    // Serial.print(" , ");
+    // Serial.println(DCsetpoint);
+    // Serial.print("  ||  ");
+    // Serial.print("Encoder: ");
+    // Serial.print(enc);
+    // Serial.print(" | Pulse: ");
+    // Serial.print(pulse);
+    // Serial.print(" | RPM: ");
+    // Serial.print(currentRpm);
+    // Serial.print("| Setpoint: ");
+    // Serial.print(DCsetpoint);
+    // Serial.print("| PID Error: ");
+    // Serial.print(DCError);
+    // Serial.print("| PID PWM: ");
+    // Serial.print(DCsignalPWM);
+    // Serial.print("| KP:");
+    // Serial.print(DCkP);
+    // Serial.print("| KI:");
+    // Serial.print(DCkI);
+    // Serial.print("| KD:");
+    // Serial.print(DCkD);
+    // Serial.println("");
     Serial.print(enc);
-    Serial.print(" | Pulse: ");
-    Serial.print(pulse);
-    Serial.print(" | RPM: ");
+    Serial.print(" , ");
     Serial.print(currentRpm);
-    Serial.print("| Setpoint: ");
+    Serial.print(" , ");
     Serial.print(DCsetpoint);
-    Serial.print("| PID Error: ");
+    Serial.print(" , ");
     Serial.print(DCError);
-    Serial.print("| PID PWM: ");
+    Serial.print(" , ");
     Serial.print(DCsignalPWM);
-    Serial.print("| KP:");
+    Serial.print(" , ");
     Serial.print(DCkP);
-    Serial.print("| KI:");
+    Serial.print(" , ");
     Serial.print(DCkI);
-    Serial.print("| KD:");
-    Serial.print(DCkD);
-    Serial.println("");
+    Serial.print(" , ");
+    Serial.println(DCkD);
   }
 }
 
@@ -181,13 +209,15 @@ void ACstartEncoderTimer() {
   timerAlarmEnable(a_timer);
 }
 void ACstartMotorTimer() {
+  pinMode(AC_DAC_SOURCE_PIN, OUTPUT);
+  pinMode(AC_DAC_VOLTAGE_SELECT_PIN, OUTPUT);
   ledcSetup(ACPWM_CHANNEL, ACPWM_FREQ, ACPWM_RESOLUTION);
   ledcAttachPin(AC_DAC2_PIN, ACPWM_CHANNEL);
   ledcWrite(ACPWM_CHANNEL, 0);
 }
 float ACgetRPM() {
   ACencoder = analogRead(AC_ENCODER_PIN);
-  ACrpm = (ACencoder / 4095.0) * 100;
+  ACrpm = (ACencoder / 4095.0) * AC_MAX_RPM;
   return ACrpm;
 }
 
@@ -195,21 +225,41 @@ void ACprintEncoderData() {
 
   if (ACnewDataReady) {
     ACnewDataReady = false;
-    Serial.print(" AC RPM: ");
+    // Serial.print(ACgetRPM());
+    // Serial.print(" , ");
+    // Serial.print(ACsetpoint);
+    // Serial.print("  ||  ");
+    // Serial.print(" AC RPM: ");
+    // Serial.print(ACgetRPM());
+    // Serial.print("| Setpoint: ");
+    // Serial.print(ACsetpoint);
+    // Serial.print("| PID Error: ");
+    // Serial.print(ACError);
+    // Serial.print("| PID PWM: ");
+    // Serial.print(ACsignalPWM);
+    // Serial.print("| KP:");
+    // Serial.print(ACkP);
+    // Serial.print("| KI:");
+    // Serial.print(ACkI);
+    // Serial.print("| KD:");
+    // Serial.print(ACkD);
+    // Serial.println("");
+
     Serial.print(ACgetRPM());
-    Serial.print("| Setpoint: ");
+    Serial.print(" , ");
+    Serial.print(ACgetRPM());
+    Serial.print(" , ");
     Serial.print(ACsetpoint);
-    Serial.print("| PID Error: ");
+    Serial.print(" , ");
     Serial.print(ACError);
-    Serial.print("| PID PWM: ");
+    Serial.print(" , ");
     Serial.print(ACsignalPWM);
-    Serial.print("| KP:");
+    Serial.print(" , ");
     Serial.print(ACkP);
-    Serial.print("| KI:");
+    Serial.print(" , ");
     Serial.print(ACkI);
-    Serial.print("| KD:");
-    Serial.print(ACkD);
-    Serial.println("");
+    Serial.print(" , ");
+    Serial.println(ACkD);
   }
 }
 

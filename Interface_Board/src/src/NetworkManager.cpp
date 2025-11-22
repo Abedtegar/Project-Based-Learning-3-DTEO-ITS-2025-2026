@@ -1,28 +1,29 @@
 #include "NetworkManager.h"
+#include <ControlMenuSystem.h>
 
-// Message ID definitions (tag values) – keep in sync with Plant side
-#ifndef MSG_SPEED
-#define MSG_SPEED 1
-#endif
-#ifndef MSG_PID_KP
-#define MSG_PID_KP 11
-#endif
-#ifndef MSG_PID_KI
-#define MSG_PID_KI 12
-#endif
-#ifndef MSG_PID_KD
-#define MSG_PID_KD 13
-#endif
-
+float DCspeed = 0;
+float ACspeed = 0;
+float plantDCKP = 0;
+float plantDCKI = 0;
+float plantDCKD = 0;
+float plantACKP = 0;
+float plantACKI = 0;
+float plantACKD = 0;
+float plantACSetpoint = 0;
+float plantDCSetpoint = 0;
 // Simpan MAC target dalam array mutable
 static uint8_t g_plantMAC[6] = {0};
 
 void onDataSent(uint8_t *mac, uint8_t status) {
   Serial.print("Status kirim: ");
   Serial.println(status == 0 ? "OK" : "FAIL");
+  if (status == 0) {
+    espconnected = true;
+  } else {
+    espconnected = false;
+  }
 }
 
-// Callback ESP-NOW (ESP8266 signature)
 void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
   // 8-byte tagged frame: int32 typeId + float value
   if (len == 8) {
@@ -31,17 +32,45 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
     memcpy(&typeId, &data[0], 4);
     memcpy(&value, &data[4], 4);
     switch (typeId) {
-    case MSG_SPEED:
+    case MSG_DC_SPEED:
+      updateEscalatorSpeed(value);
       Serial.print("RX SPEED: ");
       break;
-    case MSG_PID_KP:
+    case MSG_AC_SPEED:
+      updateMotorSpeed(value);
+      Serial.print("RX SPEED: ");
+      break;
+    case MSG_DC_KP:
+      g_dcKp = value;
       Serial.print("RX PID.KP: ");
       break;
-    case MSG_PID_KI:
+    case MSG_DC_KI:
+      g_dcKi = value;
       Serial.print("RX PID.KI: ");
       break;
-    case MSG_PID_KD:
+    case MSG_DC_KD:
+      g_dcKd = value;
       Serial.print("RX PID.KD: ");
+      break;
+    case MSG_AC_KP:
+      g_acKp = value;
+      Serial.print("RX PID.KP: ");
+      break;
+    case MSG_AC_KI:
+      g_acKi = value;
+      Serial.print("RX PID.KI: ");
+      break;
+    case MSG_AC_KD:
+      g_acKd = value;
+      Serial.print("RX PID.KD: ");
+      break;
+    case MSG_AC_Setpoint:
+      g_acSetpoint = value;
+      Serial.print("RX AC SETPOINT: ");
+      break;
+    case MSG_DC_Setpoint:
+      g_dcSetpoint = value;
+      Serial.print("RX DC SETPOINT: ");
       break;
     default:
       Serial.print("RX TYPE ");
@@ -64,6 +93,10 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
 void espnow_init() {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+
+  Serial.print("ESP-NOW MAC Address: ");
+  Serial.println(WiFi.macAddress());
+
   if (esp_now_init() != 0) {
     Serial.println("ESP-NOW init gagal");
     return;
@@ -83,7 +116,6 @@ void espnow_init() {
 }
 
 void sendData(float data) { esp_now_send(g_plantMAC, (uint8_t *)&data, 4); }
-
 
 void sendTaggedFloat(int32_t typeId, float value) {
   uint8_t buf[8];

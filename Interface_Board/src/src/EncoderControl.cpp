@@ -10,8 +10,7 @@ static volatile unsigned long DCswitchLastISR = 0;
 static EncoderMode encoderMode = ENCODER_UP;
 
 void IRAM_ATTR DChandleEncoder() {
-  // Hanya hitung pulsa dari DT falling edge
-  // Arah ditentukan oleh mode, bukan kombinasi CLK/DT
+
 
   if (encoderMode == ENCODER_UP) {
     DCencoder++;
@@ -21,13 +20,10 @@ void IRAM_ATTR DChandleEncoder() {
     DCDirection = false;
   }
 
-  // JANGAN gunakan Serial.print dalam ISR!
 }
 
 void IRAM_ATTR DChandleEncoderSW() {
-  // ISR untuk switch - TIDAK DIGUNAKAN
-  // Karena tidak semua pin ESP32 support interrupt eksternal dengan baik
-  // Gunakan polling di main loop untuk switch lebih reliable
+
 }
 
 void DCinitEncoder() {

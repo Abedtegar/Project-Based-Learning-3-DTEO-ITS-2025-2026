@@ -9,6 +9,7 @@ extern bool DCMode;
 extern volatile long DCencoder;
 extern volatile long DClastEncoder;
 extern volatile float DCrpm;
+extern volatile float DCGearboxRPM;
 extern volatile long DCpulseCount;
 extern volatile bool DCDirection;
 

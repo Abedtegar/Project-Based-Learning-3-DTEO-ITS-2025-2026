@@ -14,7 +14,6 @@
 #define MSG_DC_Control 15
 #define MSG_DC_Direction 16
 
-
 #define MSG_AC_SPEED 20
 #define MSG_AC_KP 21
 #define MSG_AC_KI 22
@@ -24,8 +23,11 @@
 #define MSG_AC_Voltage 26
 #define MSG_AC_Direction 27
 
+#define MSG_PID_MODE 30
 
+#define ESP_RESTART 100
 
+extern bool espnowReady;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void espnow_init();

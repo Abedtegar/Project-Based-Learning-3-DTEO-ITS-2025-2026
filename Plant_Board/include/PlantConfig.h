@@ -19,17 +19,19 @@
 #define ENCODER_A_PIN 34
 #define ENCODER_B_PIN 35
 #define PPR 14
-#define DCREAD_INTERVAL 5 // ms
+#define DCREAD_INTERVAL 50 // ms
 // AC Motor Encoder Pins
 #define AC_ENCODER_PIN 32
-#define ACREAD_INTERVAL 5 // ms
+#define ACREAD_INTERVAL 50 // ms
 
 // AC Motor Control Pins
 #define AC_DAC1_PIN 25
 #define AC_DAC2_PIN 26
+
 #define ACPWM_CHANNEL 1
 #define ACPWM_FREQ 5000
 #define ACPWM_RESOLUTION 12
+
 #define AC_DAC_SOURCE_PIN 27
 #define AC_DAC_VOLTAGE_SELECT_PIN 12 // changed
 
@@ -43,6 +45,9 @@
 // Serial
 #define SERIAL_BAUD 115200
 #define TX_ENABLE_PIN 4
+
+#define DC_MAX_RPM 1000
+#define AC_MAX_RPM 1500
 //
 // ========================================
 // NETWORK CONFIGURATION

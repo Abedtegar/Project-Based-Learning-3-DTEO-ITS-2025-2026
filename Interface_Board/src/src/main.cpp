@@ -14,11 +14,11 @@ void setup() {
   tft.initR(INITR_BLACKTAB);
   tft.setRotation(0);
   menuInit(&tft);
+  sendTaggedFloat(ESP_RESTART, 1);
   Serial.println("\n=== ESP-NOW Ready (Interface_Board) ===");
 }
 
 void loop() {
-
   static long lastEncoder = 0;
 
   // Handle encoder scroll
@@ -46,8 +46,15 @@ void loop() {
     break;
 
   case CLICK_DOUBLE:
-    // Double click = Toggle encoder mode (UP/DOWN)
-    toggleEncoderMode();
+    // Double click = Toggle encoder mode (UP/DOWN) or motor run/stop in graph
+    if ((g_currentMenu == 1 && g_escSubMenu == 0) ||
+        (g_currentMenu == 2 && g_motorSubMenu == 0)) {
+      // In graph mode: toggle motor run/stop
+      menuDoubleClick();
+    } else {
+      // Other modes: toggle encoder direction
+      toggleEncoderMode();
+    }
     delay(100);
     break;
 
