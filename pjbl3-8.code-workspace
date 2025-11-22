@@ -11,6 +11,9 @@
 		{
 			"name": "ambil_data_encoder",
 			"path": "ambil_data_encoder"
+		},
+		{
+			"path": "DOKUMEN"
 		}
 	],
 	"settings": {}
