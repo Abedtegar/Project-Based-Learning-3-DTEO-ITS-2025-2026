@@ -18,7 +18,7 @@
 #define ENCODER_A_PIN 34
 #define ENCODER_B_PIN 35
 #define PPR 14
-#define DCREAD_INTERVAL 5 // ms
+#define DCREAD_INTERVAL 10 // ms
 // AC Motor Encoder Pins
 #define AC_ENCODER_PIN 32
 

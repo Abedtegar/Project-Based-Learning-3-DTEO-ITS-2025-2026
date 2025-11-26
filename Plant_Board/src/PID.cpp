@@ -2,7 +2,6 @@
 #include "PlantESPNow.h"
 #include <PlantConfig.h>
 
-
 volatile float DCpreviousError = 0.0f;
 volatile float DCerrorSum = 0.0f;
 volatile float DCError = 0.0f;
@@ -11,6 +10,10 @@ volatile float DCkP = 1.5f;
 volatile float DCkI = 0.1f;
 volatile float DCkD = 0.05f;
 volatile float DCsetpoint = 50.0f;
+
+// Tambahkan batas minimum PWM untuk anti-stall
+#define DC_PWM_MIN 800.0f
+#define AC_PWM_MIN 800.0f
 
 volatile float ACpreviousError = 0.0f;
 volatile float ACerrorSum = 0.0f;
@@ -49,11 +52,14 @@ float AC_PID(float setpoint, float measured, float dt) {
 
   output = (ACProportional + ACIntegral + ACDerivative) * -1;
 
-  // === OUTPUT SATURATION ===
+  // === OUTPUT SATURATION & ANTI-STALL ===
   if (output > 4095.0)
     output = 4095.0;
-  else if (output < 4095.0)
-    output = .0;
+  else if (output < 0.0)
+    output = 0.0;
+  // Anti-stall: jika output di antara 0 dan AC_PWM_MIN, naikkan ke AC_PWM_MIN
+  else if (output > 0.0 && output < AC_PWM_MIN)
+    output = AC_PWM_MIN;
 
   return output;
 }
@@ -80,14 +86,19 @@ float DC_PID(float setpoint, float measured, float dt) {
 
   DCpreviousError = DCError;
 
-  output = DCProportional + DCIntegral + DCDerivative;
+  output = (DCProportional + DCIntegral + DCDerivative) * 10;
 
-  // === OUTPUT SATURATION ===
-  // Batasi output untuk DC motor (asumsi range: -255 hingga 255)
+  // === OUTPUT SATURATION & ANTI-STALL ===
   if (output > 4095.0)
     output = 4095.0;
   else if (output < -4095.0)
     output = -4095.0;
+  // Anti-stall: jika output positif tapi kecil, naikkan ke DC_PWM_MIN
+  else if (output > 0.0 && output < DC_PWM_MIN)
+    output = DC_PWM_MIN;
+  // Jika output negatif tapi kecil, turunkan ke -DC_PWM_MIN
+  else if (output < 0.0 && output > -DC_PWM_MIN)
+    output = -DC_PWM_MIN;
 
   return output;
 }

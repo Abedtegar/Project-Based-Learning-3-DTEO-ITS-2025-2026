@@ -36,8 +36,9 @@ float ACgetRPM();          // dapatkan RPM AC
 long ACgetEncoderCount();  // dapatkan jumlah encoder AC
 void ACresetEncoder();     // reset encoder AC
 void ACprintEncoderData(); // cetak data encoder AC
-void ACmotorControl(bool direction, long speed, bool voltage,
-                    int mode); // kontrol motor AC
+void ACmotorControl(bool direction, long speed, bool voltage, int mode); // kontrol motor AC
 void ACstartMotorTimer();      // mulai timer motor DC
 void ACstartEncoderTimer();
+void DC_ProsesPID();
+void AC_ProsesPID();
 #endif

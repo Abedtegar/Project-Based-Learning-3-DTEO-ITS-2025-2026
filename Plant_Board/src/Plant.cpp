@@ -28,28 +28,36 @@ int ACMotorControlMode = 0;
 static hw_timer_t *a_timer = NULL;
 static hw_timer_t *m_timer = NULL;
 
-volatile float RPM_FACTOR = 60000.0 / DCREAD_INTERVAL/PPR;
+volatile float RPM_FACTOR = 60000.0 / DCREAD_INTERVAL / PPR;
 
-                            static portMUX_TYPE timerMux =
-                                portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+void DC_ProsesPID() {
+  if (DCnewDataReady) {
+    portENTER_CRITICAL_ISR(&timerMux);
+    DCnewDataReady = false;
+    DCpulseCount = DCencoder - DClastEncoder;
+    DClastEncoder = DCencoder;
+    DCrpm = (abs(DCpulseCount) * RPM_FACTOR);
+    DCGearboxRPM = DCrpm / 200.0; // Assuming a gearbox ratio of 200:1
+    portEXIT_CRITICAL_ISR(&timerMux);
+    if (DCMode && PIDMODE) {
+      DCsignalPWM = DC_PID(DCsetpoint, DCGearboxRPM, DCREAD_INTERVAL / 1000.0);
+      DCmotorControl(DCDirection, DCsignalPWM);
+    } else if (DCMode && !PIDMODE) {
+      DCmotorControl(DCDirection, map(DCsetpoint, 0, 150, 0, 4095));
+    }
+  }
+}
+
+void AC_ProsesPID() {}
 
 // ISR Handler
 void IRAM_ATTR DConTimer() {
-  if (DCMode && PIDMODE) {
-    portENTER_CRITICAL_ISR(&timerMux);
-    DCpulseCount = DCencoder - DClastEncoder;
-    DClastEncoder = DCencoder;
-    DCrpm = (DCpulseCount * RPM_FACTOR);
-    DCGearboxRPM = DCrpm / 50.0; // Assuming a gearbox ratio of 50:1
-    DCsignalPWM = DC_PID(DCsetpoint, DCrpm, DCREAD_INTERVAL / 1000.0);
-    DCmotorControl(DCDirection, DCsignalPWM);
-    DCnewDataReady = true;
-    // Don't call ESP-NOW from ISR - do it in main loop instead
-    portEXIT_CRITICAL_ISR(&timerMux);
-  } else if (DCMode && !PIDMODE) {
-    DCmotorControl(DCDirection, map(DCsetpoint, 0, 100, 0, 4095));
+  if (DCMode) {
     DCnewDataReady = true;
   } else {
+    DCnewDataReady = false;
     DCmotorControl(0, 0);
   }
 }
@@ -63,7 +71,8 @@ void IRAM_ATTR AConTimer() {
     // Don't call ESP-NOW from ISR - do it in main loop instead
     portEXIT_CRITICAL_ISR(&timerMux);
   } else if (ACMode && !PIDMODE) {
-    ACmotorControl(true, map(ACsetpoint, 0, AC_MAX_RPM, 0, 4095), ACVoltage, ACMode);
+    ACmotorControl(true, map(ACsetpoint, 0, AC_MAX_RPM, 0, 4095), ACVoltage,
+                   ACMode);
     ACnewDataReady = true;
   } else {
     ACmotorControl(false, 0, ACVoltage, ACMode);
@@ -71,6 +80,8 @@ void IRAM_ATTR AConTimer() {
 }
 
 void IRAM_ATTR DChandleEncoderA() {
+  portENTER_CRITICAL_ISR(&timerMux);
+  // Serial.print("ISR A called\n");
   int stateA = digitalRead(ENCODER_A_PIN);
   int stateB = digitalRead(ENCODER_B_PIN);
 
@@ -88,6 +99,7 @@ void IRAM_ATTR DChandleEncoderA() {
     }
     DClastStateA = stateA;
   }
+  portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 void IRAM_ATTR DChandleEncoderB() {
@@ -116,8 +128,8 @@ void DCinitEncoder() {
   pinMode(MOTOR_DIR_PIN, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_PIN), DChandleEncoderA,
                   CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN), DChandleEncoderB,
-                  CHANGE);
+  // attachInterrupt(digitalPinToInterrupt(ENCODER_B_PIN),
+  // DChandleEncoderB,CHANGE);
 }
 
 void DCstartEncoderTimer() {
@@ -152,36 +164,14 @@ void DCprintEncoderData() {
   if (DCnewDataReady) {
     portENTER_CRITICAL(&timerMux);
     long enc = DCencoder;
-    long pulse = DCpulseCount;
     float currentRpm = DCrpm;
-    DCnewDataReady = false;
     portEXIT_CRITICAL(&timerMux);
-    // Serial.print(currentRpm);
-    // Serial.print(" , ");
-    // Serial.println(DCsetpoint);
-    // Serial.print("  ||  ");
-    // Serial.print("Encoder: ");
-    // Serial.print(enc);
-    // Serial.print(" | Pulse: ");
-    // Serial.print(pulse);
-    // Serial.print(" | RPM: ");
-    // Serial.print(currentRpm);
-    // Serial.print("| Setpoint: ");
-    // Serial.print(DCsetpoint);
-    // Serial.print("| PID Error: ");
-    // Serial.print(DCError);
-    // Serial.print("| PID PWM: ");
-    // Serial.print(DCsignalPWM);
-    // Serial.print("| KP:");
-    // Serial.print(DCkP);
-    // Serial.print("| KI:");
-    // Serial.print(DCkI);
-    // Serial.print("| KD:");
-    // Serial.print(DCkD);
-    // Serial.println("");
+    sendTaggedFloat(MSG_DC_SPEED, DCGearboxRPM);
+    Serial.print(millis());
+    Serial.print(" , ");
     Serial.print(enc);
     Serial.print(" , ");
-    Serial.print(currentRpm);
+    Serial.print(DCGearboxRPM);
     Serial.print(" , ");
     Serial.print(DCsetpoint);
     Serial.print(" , ");

@@ -2,7 +2,6 @@
 #define PLANT_CONFIG_H
 #include <cstdint>
 
-
 // ========================================
 // PIN CONFIGURATION PLANT BOARD
 // ========================================
@@ -40,7 +39,6 @@
 #define LED_PID 19
 #define LED_DC_CONTROL 18
 #define LED_AC_CONTROL 5
-
 
 // Serial
 #define SERIAL_BAUD 115200

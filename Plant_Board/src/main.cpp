@@ -40,26 +40,23 @@ void setup() {
   ACstartMotorTimer();
 
   // 5. Start timers TERAKHIR (setelah ESP-NOW siap)
+  UpdatePIDParam();
   DCstartEncoderTimer();
   ACstartEncoderTimer();
-  UpdatePIDParam();
 
   Serial.println("=== SETUP COMPLETE ===");
   Serial.println();
 }
 void loop() {
-  // Send data via ESP-NOW (safe in main loop, not in ISR)
-  static unsigned long lastSend = 0;
-  if (millis() - lastSend > DCREAD_INTERVAL) { // Send every 100ms
-    lastSend = millis();
-    if (DCMode) {
-      sendTaggedFloat(MSG_DC_SPEED, DCGearboxRPM);
-      DCprintEncoderData();
-    }
-    if (ACMode) {
-      sendTaggedFloat(MSG_AC_SPEED, ACrpm);
-      ACprintEncoderData();
-    }
+
+  if (DCMode) {
+    DCprintEncoderData();
+    DC_ProsesPID();
   }
 
+
+  if (ACMode) {
+    ACprintEncoderData();
+    AC_ProsesPID();
+  }
 }

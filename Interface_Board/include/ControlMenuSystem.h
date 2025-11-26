@@ -3,7 +3,7 @@
 
 #include <Adafruit_ST7735.h>
 
-constexpr float ESC_GRAPH_MAX = 1000.0f; // Batas vertikal grafik escalator/DC
+constexpr float ESC_GRAPH_MAX = 150.0f; // Batas vertikal grafik escalator/DC
 constexpr float AC_GRAPH_MAX = 1600.0f;  // Batas vertikal grafik motor AC
 
 // Variabel global

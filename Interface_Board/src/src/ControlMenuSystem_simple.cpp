@@ -23,7 +23,7 @@ float g_escSpeed = 0;
 float g_escTarget = 0;
 int g_escDirection = 0;
 int g_escMode = 0;
-bool g_escRunning = false;
+bool g_escRunning = true;
 bool g_escConnected = false;
 float g_escSpeedHistory[100] = {0};
 int g_escHistoryIndex = 0;
@@ -281,9 +281,10 @@ void drawEscControl(int updateLine = -1) {
     drawFooter("1x:EDT 2x:DIR Lx:BACK");
   }
 
-  const char *items[] = {"Run", "Kp", "Ki", "Kd", "Setpt", "PID"};
+  // Added "Dir" option at the end (index 6)
+  const char *items[] = {"Run", "Kp", "Ki", "Kd", "Setpt", "PID", "Dir"};
   int start = (updateLine == -1) ? 0 : updateLine;
-  int end = (updateLine == -1) ? 6 : updateLine + 1;
+  int end = (updateLine == -1) ? 7 : updateLine + 1;
 
   for (int i = start; i < end; i++) {
     int y = 25 + i * 15;
@@ -312,6 +313,8 @@ void drawEscControl(int updateLine = -1) {
       g_display->print(g_dcSetpoint, 1);
     else if (i == 5)
       g_display->print(g_pidMode ? "ON " : "OFF");
+    else if (i == 6)
+      g_display->print(g_escDirection ? "REV" : "FWD");
   }
 }
 
@@ -521,13 +524,13 @@ void menuNavigate(int direction) {
       // Escalator control edit
       if (g_selectedIndex == 1) {
         g_dcKp += direction * 0.1;
-        g_dcKp = constrain(g_dcKp, 0, 10);
+        g_dcKp = constrain(g_dcKp, 0, 100);
       } else if (g_selectedIndex == 2) {
         g_dcKi += direction * 0.01;
-        g_dcKi = constrain(g_dcKi, 0, 5);
+        g_dcKi = constrain(g_dcKi, 0, 10);
       } else if (g_selectedIndex == 3) {
         g_dcKd += direction * 0.01;
-        g_dcKd = constrain(g_dcKd, 0, 5);
+        g_dcKd = constrain(g_dcKd, 0, 10);
       } else if (g_selectedIndex == 4) {
         g_dcSetpoint += direction * 5;
         g_dcSetpoint = constrain(g_dcSetpoint, 0, ESC_GRAPH_MAX);
@@ -556,7 +559,7 @@ void menuNavigate(int direction) {
     // Navigation mode
     int maxItems = 3;
     if (g_currentMenu == 1 && g_escSubMenu == 1)
-      maxItems = 6;
+      maxItems = 7; // include Direction option
     else if (g_currentMenu == 2 && g_motorSubMenu == 1)
       maxItems = 6;
     else if (g_currentMenu != 0)
@@ -631,6 +634,12 @@ void menuSelect() {
         sendTaggedFloat(MSG_PID_MODE, g_pidMode ? 1 : 0);
         Serial.print("Sent PID Mode");
         Serial.println(g_pidMode ? 1 : 0);
+      } else if (g_selectedIndex == 6) {
+        // Toggle direction and send message
+        g_escDirection = g_escDirection ? 0 : 1;
+        sendTaggedFloat(MSG_DC_Direction, g_escDirection ? 1 : 0);
+        Serial.print("Sent DC Direction: ");
+        Serial.println(g_escDirection ? 1 : 0);
       }
       // Update only current line
       drawEscControl(g_selectedIndex);
