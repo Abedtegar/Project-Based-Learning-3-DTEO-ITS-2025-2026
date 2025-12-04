@@ -1,4 +1,3 @@
-#include <Arduino.h>
 #include "DataStorage.h"
 #include "LedControl.h"
 #include "PID.h"
@@ -7,6 +6,8 @@
 #include "PlantESPNow.h"
 #include "soc/rtc_cntl_reg.h"
 #include "soc/soc.h"
+#include <Arduino.h>
+
 
 int x = 10;
 void disableBrownout() { WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); }
@@ -43,19 +44,19 @@ void setup() {
   UpdatePIDParam();
   DCstartEncoderTimer();
   ACstartEncoderTimer();
+  ACsetKalmanParams(0.01, 3.0); // Ubah parameter jika perlu
 
   Serial.println("=== SETUP COMPLETE ===");
   Serial.println();
 }
 void loop() {
 
-  if (DCMode) {
+  if (dcspeedRequest) {
     DCprintEncoderData();
     DC_ProsesPID();
   }
 
-
-  if (ACMode) {
+  if (acspeedRequest) {
     ACprintEncoderData();
     AC_ProsesPID();
   }

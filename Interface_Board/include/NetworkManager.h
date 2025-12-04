@@ -24,16 +24,26 @@
 #define MSG_AC_Direction 27
 
 #define MSG_PID_MODE 30
+#define MSG_SPD_REQUEST 31
+#define MSG_TIMESTAMP 32
 
 #define ESP_RESTART 100
 
 extern bool espconnected;
 extern float DCspeed;
 extern float ACspeed;
+extern float DCError;
+extern float ACError;
+extern long timestamp;
+extern long timestamp_buffer[];
+extern int timestamp_idx;
+extern const int TIMESTAMP_BUF ; // Buffer untuk 100 timestamp
+
 void espnow_init();          // inisialisasi ESP-NOW
 void sendSpeed(float speed); // kirim 4 byte float
 void receiveData(uint8_t *mac, uint8_t *data, uint8_t len); // callback RX
 void onDataSent(uint8_t *mac, uint8_t status);              // callback TX
 void sendTaggedFloat(int32_t typeId, float value);
-
+void addTimestamp(long ts);
+long getTimestamp(int index);
 #endif

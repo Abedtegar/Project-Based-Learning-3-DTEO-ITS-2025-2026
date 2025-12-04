@@ -1,7 +1,9 @@
 #include "NetworkManager.h"
+#include <Arduino.h>
 #include <ControlMenuSystem.h>
 
 float DCspeed = 0;
+
 float ACspeed = 0;
 float plantDCKP = 0;
 float plantDCKI = 0;
@@ -11,6 +13,29 @@ float plantACKI = 0;
 float plantACKD = 0;
 float plantACSetpoint = 0;
 float plantDCSetpoint = 0;
+float DCError = 0;
+float ACError = 0;
+long timestamp = 0;
+// Monitoring buffers for PID response analysis
+const int MON_BUF = 500;
+// DC monitoring
+long dc_ts[MON_BUF];
+float dc_vals[MON_BUF];
+int dc_idx = 0;
+bool dc_monitoring = false;
+float dc_target = 0.0f;
+long dc_start_ts = 0;
+// AC monitoring
+long ac_ts[MON_BUF];
+float ac_vals[MON_BUF];
+int ac_idx = 0;
+bool ac_monitoring = false;
+float ac_target = 0.0f;
+long ac_start_ts = 0;
+// Tambahkan buffer untuk menyimpan timestamp
+const int TIMESTAMP_BUF = 100; // Buffer untuk 100 timestamp
+long timestamp_buffer[TIMESTAMP_BUF];
+int timestamp_idx = 0;
 // Simpan MAC target dalam array mutable
 static uint8_t g_plantMAC[6] = {0};
 
@@ -34,11 +59,20 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
     switch (typeId) {
     case MSG_DC_SPEED:
       updateEscalatorSpeed(value);
-      Serial.print("RX SPEED: ");
+      Serial.print("Time: ,");
+      Serial.print(timestamp);
+      Serial.print(", DC SPEED: , ");
+      Serial.println(value, 4);
+
+
       break;
     case MSG_AC_SPEED:
       updateMotorSpeed(value);
-      Serial.print("RX SPEED: ");
+      Serial.print("Time: ,");
+      Serial.print(timestamp);
+      Serial.print(", AC SPEED: ,");
+      Serial.println(value, 4);
+      // record sample if monitoring active
       break;
     case MSG_DC_KP:
       g_dcKp = value;
@@ -67,10 +101,50 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
     case MSG_AC_Setpoint:
       g_acSetpoint = value;
       Serial.print("RX AC SETPOINT: ");
+      ac_target = value;
       break;
     case MSG_DC_Setpoint:
       g_dcSetpoint = value;
       Serial.print("RX DC SETPOINT: ");
+      // hanya update target, jangan reset monitoring
+      dc_target = value;
+      break;
+    case MSG_DC_Control:
+      Serial.print("RX DC_Control: ");
+      if (value > 0.5f) {
+        // Motor ON - start fresh monitoring dengan setpoint sekarang
+        dc_monitoring = true;
+        dc_idx = 0;
+        dc_target = g_dcSetpoint;
+        dc_start_ts = timestamp ? timestamp : millis();
+        Serial.println("DC Motor ON - monitoring dimulai");
+      } else {
+        // Motor OFF - stop monitoring dan reset metrics
+        dc_monitoring = false;
+        dc_idx = 0;
+        Serial.println("DC Motor OFF - metrics di-reset");
+      }
+      break;
+    case MSG_AC_Control:
+      Serial.print("RX AC_Control: ");
+      if (value > 0.5f) {
+        // Motor ON - start fresh monitoring dengan setpoint sekarang
+        ac_monitoring = true;
+        ac_idx = 0;
+        ac_target = g_acSetpoint;
+        ac_start_ts = timestamp ? timestamp : millis();
+        Serial.println("AC Motor ON - monitoring dimulai");
+      } else {
+        // Motor OFF - stop monitoring dan reset metrics
+        ac_monitoring = false;
+        ac_idx = 0;
+        Serial.println("AC Motor OFF - metrics di-reset");
+      }
+      break;
+    case MSG_TIMESTAMP:
+      // Serial.print("RX TIMESTAMP: ");
+      timestamp = (long)value;
+      addTimestamp(timestamp); // Simpan timestamp ke buffer
       break;
     default:
       Serial.print("RX TYPE ");
@@ -78,7 +152,7 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
       Serial.print(": ");
       break;
     }
-    Serial.println(value, 4);
+    // Serial.println(value, 4);
     return;
   }
   if (len == 4) {
@@ -88,6 +162,20 @@ void receiveData(uint8_t *mac, uint8_t *data, uint8_t len) {
     Serial.println(v, 4);
     return;
   }
+}
+
+// Fungsi untuk menambahkan timestamp ke buffer
+void addTimestamp(long ts) {
+  timestamp_buffer[timestamp_idx] = ts;
+  timestamp_idx = (timestamp_idx + 1) % TIMESTAMP_BUF;
+}
+
+// Fungsi untuk mendapatkan timestamp dari buffer
+long getTimestamp(int index) {
+  if (index < 0 || index >= TIMESTAMP_BUF) {
+    return -1; // Nilai invalid jika index di luar rentang
+  }
+  return timestamp_buffer[(timestamp_idx + index) % TIMESTAMP_BUF];
 }
 
 void espnow_init() {

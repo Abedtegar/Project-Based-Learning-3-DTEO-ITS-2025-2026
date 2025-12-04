@@ -50,11 +50,11 @@ float AC_PID(float setpoint, float measured, float dt) {
 
   ACpreviousError = ACError;
 
-  output = (ACProportional + ACIntegral + ACDerivative) * -1;
+  output = ACProportional + ACIntegral + ACDerivative;
 
   // === OUTPUT SATURATION & ANTI-STALL ===
-  if (output > 4095.0)
-    output = 4095.0;
+  if (output > 255.0)
+    output = 255.0;
   else if (output < 0.0)
     output = 0.0;
   // Anti-stall: jika output di antara 0 dan AC_PWM_MIN, naikkan ke AC_PWM_MIN

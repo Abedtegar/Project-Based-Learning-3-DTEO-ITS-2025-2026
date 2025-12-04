@@ -24,11 +24,13 @@
 #define MSG_AC_Direction 27
 
 #define MSG_PID_MODE 30
-
+#define MSG_SPD_REQUEST 31
+#define MSG_TIMESTAMP 32
 #define ESP_RESTART 100
 
 extern bool espnowReady;
-
+extern bool dcspeedRequest;
+extern bool acspeedRequest;
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void espnow_init();
 void sendData(float data);

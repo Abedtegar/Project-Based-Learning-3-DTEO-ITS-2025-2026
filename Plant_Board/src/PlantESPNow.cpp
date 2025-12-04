@@ -8,6 +8,7 @@ bool DCMode = true;
 bool ACMode = false;
 bool PIDMODE = false;
 bool espnowReady = false;
+bool speedRequest = false;
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   // Serial.print("Status Pengiriman: ");
@@ -104,10 +105,14 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
         DCMode = true;
         ACMode = false;
         setLedState(LED_DC_CONTROL, true);
+        DClastEncoder = DCencoder;
+        waktu_awal_motor = millis();
+        sendTaggedFloat(MSG_DC_Control, 1);
       } else if (value == 0) {
         DCMode = false;
         ACMode = false;
         setLedState(LED_DC_CONTROL, false);
+        sendTaggedFloat(MSG_DC_Control, 0);
       }
       break;
     case MSG_AC_Control:
@@ -115,10 +120,13 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
         ACMode = true;
         DCMode = false;
         setLedState(LED_AC_CONTROL, true);
+        waktu_awal_motor = millis();
+        sendTaggedFloat(MSG_AC_Control, 1);
       } else if (value == 0) {
         ACMode = false;
         DCMode = false;
         setLedState(LED_AC_CONTROL, false);
+        sendTaggedFloat(MSG_AC_Control, 0);
       }
       break;
     case MSG_AC_Voltage:
@@ -150,6 +158,19 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       Serial.print("RX TYPE ");
       Serial.print(typeId);
       Serial.print(": ");
+      break;
+    case MSG_SPD_REQUEST:
+      if (value == 1) {
+        dcspeedRequest = true;
+        acspeedRequest = false;
+      } else if(value == 2) {
+        acspeedRequest = true;
+        dcspeedRequest = false;
+      }
+      else {
+        dcspeedRequest = false;
+        acspeedRequest = false;
+      }
       break;
     }
     Serial.print("type id: ");

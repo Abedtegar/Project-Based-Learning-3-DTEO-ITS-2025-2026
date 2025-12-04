@@ -96,7 +96,7 @@
 // ESP-NOW Configuration
 // MAC Address untuk komunikasi (sesuaikan dengan device kalian)
 // SignBox/Plant MAC Address
-static const uint8_t PLANT_MAC[6] = {0xD4, 0xD4, 0xDA, 0x5C, 0xFB, 0x88};
+static const uint8_t PLANT_MAC[6] = {0x7C, 0x9E, 0xBD, 0x48, 0x85, 0xB4};
 
 // Contoh MAC Address lainnya (uncomment jika diperlukan)
 

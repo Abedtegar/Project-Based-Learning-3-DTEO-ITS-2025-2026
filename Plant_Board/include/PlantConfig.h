@@ -8,10 +8,10 @@
 
 // DC Motor Control Pins
 #define MOTOR_PWM_PIN 13
-#define MOTOR_DIR_PIN 22 // changed
+#define MOTOR_DIR_PIN 23 // changed
 // PWM
 #define PWM_CHANNEL 0
-#define PWM_FREQ 5000
+#define PWM_FREQ 500
 #define PWM_RESOLUTION 12
 
 // DC Motor Encoder Pins
@@ -21,16 +21,16 @@
 #define DCREAD_INTERVAL 50 // ms
 // AC Motor Encoder Pins
 #define AC_ENCODER_PIN 32
-#define ACREAD_INTERVAL 50 // ms
+#define ACREAD_INTERVAL 10 // ms
 
 // AC Motor Control Pins
 #define AC_DAC1_PIN 25
 #define AC_DAC2_PIN 26
 
 #define ACPWM_CHANNEL 1
-#define ACPWM_FREQ 5000
+#define ACPWM_FREQ 500
 #define ACPWM_RESOLUTION 12
-
+#define AC_READ_SCALING_FACTOR 2.304147465f
 #define AC_DAC_SOURCE_PIN 27
 #define AC_DAC_VOLTAGE_SELECT_PIN 12 // changed
 
@@ -45,7 +45,7 @@
 #define TX_ENABLE_PIN 4
 
 #define DC_MAX_RPM 1000
-#define AC_MAX_RPM 1500
+#define AC_MAX_RPM 1600
 //
 // ========================================
 // NETWORK CONFIGURATION

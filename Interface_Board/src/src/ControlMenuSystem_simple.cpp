@@ -113,6 +113,22 @@ void drawMenuItem(int y, const char *text, bool selected) {
   g_display->println(text);
 }
 
+// Perbarui fungsi drawTimeGrid untuk menampilkan grid per 1 detik
+void drawTimeGrid(int leftX, int rightX, int topY, int bottomY) {
+  const int interval = 1000; // Interval grid dalam ms (1 detik)
+  for (int i = 0; i < TIMESTAMP_BUF - 1; ++i) {
+    long ts1 = getTimestamp(i);
+    long ts2 = getTimestamp(i + 1);
+    if (ts1 == -1 || ts2 == -1) {
+      break; // Tidak ada data lebih lanjut
+    }
+    if ((ts2 - ts1) >= interval) {
+      int x = rightX - ((i * (rightX - leftX)) / TIMESTAMP_BUF);
+      g_display->drawLine(x, topY, x, bottomY, ST77XX_CYAN);
+    }
+  }
+}
+
 // ========================================
 // INISIALISASI
 // ========================================
@@ -154,8 +170,6 @@ void showSplash() {
 void drawRootMenu() {
   g_display->fillScreen(COLOR_BG);
   drawHeader("MAIN MENU");
-  sendTaggedFloat(MSG_DC_Control, 0);
-  sendTaggedFloat(MSG_AC_Control, 0);
 
   drawMenuItem(30, "Escalator", g_selectedIndex == 0);
   drawMenuItem(60, "Motor AC", g_selectedIndex == 1);
@@ -198,7 +212,7 @@ void drawEscGraph(bool fullRedraw = false) {
     g_display->print((int)ESC_GRAPH_MAX);
     g_display->setCursor(2, 88);
     g_display->print("0");
-    g_display->fillRect(0, 100, 128, 28, COLOR_BG);
+    g_display->fillRect(0, 100, 128, 40, COLOR_BG);
     g_display->setTextColor(COLOR_TEXT);
     g_display->setCursor(5, 105);
     g_display->print("Spd:");
@@ -208,15 +222,41 @@ void drawEscGraph(bool fullRedraw = false) {
     g_display->setCursor(5, 115);
     g_display->print("SP:");
     g_display->print(g_dcSetpoint, 0);
-    g_display->setTextColor(ST77XX_CYAN);
-    g_display->setCursor(70, 105);
-    g_display->print("Y:rpm");
-    g_display->setCursor(70, 115);
-    g_display->print("X:ms");
+    // Error display (selisih speed - setpoint) -> tampil di bawah SP
+    float escErr = g_escSpeed - g_dcSetpoint;
+    g_display->setTextColor(COLOR_TEXT);
     g_display->setCursor(5, 125);
+    g_display->print("Err:");
+    // Clear area for error + percent (wider to avoid overlap)
+    g_display->fillRect(36, 125, 46, 8, COLOR_BG);
+    g_display->setTextColor(COLOR_ACCENT);
+    g_display->setCursor(36, 125);
+    g_display->print(escErr, 0);
+    // Percent error based on 50 latest samples (average absolute error /
+    // setpoint)
+    {
+      const int pctSamples = 50;
+      float sumAbs = 0.0f;
+      for (int i = 0; i < pctSamples; ++i) {
+        int idx = (g_escHistoryIndex - 1 - i + maxSamples) % maxSamples;
+        float v = g_escSpeedHistory[idx];
+        sumAbs += fabs(v - g_dcSetpoint);
+      }
+      float avgAbs = sumAbs / (float)pctSamples;
+      float denom = fabs(g_dcSetpoint) > 0.01f ? fabs(g_dcSetpoint)
+                                               : (float)ESC_GRAPH_MAX;
+      int perc = (int)((avgAbs / denom) * 100.0f + 0.5f);
+      g_display->setCursor(56, 125);
+      g_display->print(perc, 0);
+      g_display->print("%");
+    }
+    // removed Y:rpm and X:ms labels
+    // Status motor di bawah error
+    g_display->setCursor(5, 135);
     g_display->setTextColor(COLOR_TEXT);
     g_display->print("M: ");
     g_display->setTextColor(g_escRunning ? ST77XX_GREEN : ST77XX_RED);
+    g_display->setCursor(36, 135);
     g_display->print(g_escRunning ? "RUN" : "STOP");
     drawFooter("1x:CTL 2x:RUN Lx:BACK");
     return;
@@ -268,12 +308,39 @@ void drawEscGraph(bool fullRedraw = false) {
   g_display->print(g_escSpeed, 0);
   static bool lastRunEsc = false;
   if (lastRunEsc != g_escRunning) {
-    g_display->fillRect(20, 125, 40, 8, COLOR_BG);
-    g_display->setCursor(20, 125);
+    g_display->fillRect(36, 135, 46, 8, COLOR_BG);
+    g_display->setCursor(36, 135);
     g_display->setTextColor(g_escRunning ? ST77XX_GREEN : ST77XX_RED);
     g_display->print(g_escRunning ? "RUN" : "STOP");
     lastRunEsc = g_escRunning;
   }
+
+  // Update error display (clear area then print) - tampil di bawah SP
+  g_display->fillRect(36, 125, 46, 8, COLOR_BG);
+  g_display->setTextColor(COLOR_ACCENT);
+  g_display->setCursor(36, 125);
+  g_display->print(g_escSpeed - g_dcSetpoint, 0);
+  // percent error (50 samples)
+  {
+    const int pctSamples = 50;
+    float sumAbs = 0.0f;
+    for (int i = 0; i < pctSamples; ++i) {
+      int idx = (g_escHistoryIndex - 1 - i + maxSamples) % maxSamples;
+      float v = g_escSpeedHistory[idx];
+      sumAbs += fabs(v - g_dcSetpoint);
+    }
+    float avgAbs = sumAbs / (float)pctSamples;
+    float denom =
+        fabs(g_dcSetpoint) > 0.01f ? fabs(g_dcSetpoint) : (float)ESC_GRAPH_MAX;
+    int perc = (int)((avgAbs / denom) * 100.0f + 0.5f);
+    g_display->setTextColor(COLOR_HEADER);
+    g_display->setCursor(56, 125);
+    g_display->print(perc, 0);
+    g_display->print("%");
+  }
+  // update metrics box on right (incremental)
+  // Tambahkan grid waktu
+  // drawTimeGrid(leftX, rightX, 25, 95);
 }
 void drawEscControl(int updateLine = -1) {
   if (updateLine == -1) {
@@ -361,7 +428,7 @@ void drawMotorGraph(bool fullRedraw = false) {
     g_display->print((int)AC_GRAPH_MAX);
     g_display->setCursor(2, 88);
     g_display->print("0");
-    g_display->fillRect(0, 100, 128, 28, COLOR_BG);
+    g_display->fillRect(0, 100, 128, 40, COLOR_BG);
     g_display->setTextColor(COLOR_TEXT);
     g_display->setCursor(5, 105);
     g_display->print("Spd:");
@@ -371,15 +438,42 @@ void drawMotorGraph(bool fullRedraw = false) {
     g_display->setCursor(5, 115);
     g_display->print("SP:");
     g_display->print(g_acSetpoint, 0);
-    g_display->setTextColor(ST77XX_CYAN);
-    g_display->setCursor(70, 105);
-    g_display->print("Y:rpm");
-    g_display->setCursor(70, 115);
-    g_display->print("X:ms");
+    // Error display (selisih speed - setpoint) -> tampil di bawah SP
+    float acErr = g_motorSpeed - g_acSetpoint;
+    g_display->setTextColor(COLOR_TEXT);
     g_display->setCursor(5, 125);
+    g_display->print("Err:");
+    // Clear area for error + percent (wider to avoid overlap)
+    g_display->fillRect(36, 125, 46, 8, COLOR_BG);
+    g_display->setTextColor(COLOR_ACCENT);
+    g_display->setCursor(36, 125);
+    g_display->print(acErr, 0);
+    // Percent error based on 50 latest samples (average absolute error /
+    // setpoint)
+    {
+      const int pctSamples = 50;
+      float sumAbs = 0.0f;
+      for (int i = 0; i < pctSamples; ++i) {
+        int idx = (g_motorHistoryIndex - 1 - i + maxSamples) % maxSamples;
+        float v = g_motorSpeedHistory[idx];
+        sumAbs += fabs(v - g_acSetpoint);
+      }
+      float avgAbs = sumAbs / (float)pctSamples;
+      float denom =
+          fabs(g_acSetpoint) > 0.01f ? fabs(g_acSetpoint) : (float)AC_GRAPH_MAX;
+      int perc = (int)((avgAbs / denom) * 100.0f + 0.5f);
+      g_display->setCursor(56, 125);
+      g_display->print(perc, 0);
+      g_display->print("%");
+    }
+    // removed Y:rpm and X:ms labels
+    // Status motor di bawah error
+    g_display->setCursor(5, 135);
     g_display->setTextColor(COLOR_TEXT);
     g_display->print("M: ");
     g_display->setTextColor(g_motorRunning ? ST77XX_GREEN : ST77XX_RED);
+    g_display->fillRect(36, 135, 46, 8, COLOR_BG);
+    g_display->setCursor(36, 135);
     g_display->print(g_motorRunning ? "RUN" : "STOP");
     drawFooter("1x:CTL 2x:RUN Lx:BACK");
     return;
@@ -419,19 +513,44 @@ void drawMotorGraph(bool fullRedraw = false) {
   g_display->print(g_motorSpeed, 0);
   static bool lastRunMotor = false;
   if (lastRunMotor != g_motorRunning) {
-    g_display->fillRect(20, 125, 40, 8, COLOR_BG);
-    g_display->setCursor(20, 125);
+    g_display->fillRect(36, 135, 46, 8, COLOR_BG);
+    g_display->setCursor(36, 135);
     g_display->setTextColor(g_motorRunning ? ST77XX_GREEN : ST77XX_RED);
     g_display->print(g_motorRunning ? "RUN" : "STOP");
     lastRunMotor = g_motorRunning;
   }
-}
 
-void drawMotorControl(int updateLine = -1) {
-  if (updateLine == -1) {
-    g_display->fillRect(0, 20, 128, 140, COLOR_BG);
-    drawFooter("1x:EDT 2x:DIR Lx:BACK");
+  // Update error display (clear area then print) - tampil di bawah SP
+  g_display->fillRect(36, 125, 46, 8, COLOR_BG);
+  g_display->setTextColor(COLOR_ACCENT);
+  g_display->setCursor(36, 125);
+  g_display->print(g_motorSpeed - g_acSetpoint, 0);
+  //percent error (50 samples)
+  {
+    const int pctSamples = 50;
+    float sumAbs = 0.0f;
+    for (int i = 0; i < pctSamples; ++i) {
+      int idx = (g_motorHistoryIndex - 1 - i + maxSamples) % maxSamples;
+      float v = g_motorSpeedHistory[idx];
+      sumAbs += fabs(v - g_acSetpoint);
+    }
+    float avgAbs = sumAbs / (float)pctSamples;
+    float denom =
+        fabs(g_acSetpoint) > 0.01f ? fabs(g_acSetpoint) : (float)AC_GRAPH_MAX;
+    int perc = (int)((avgAbs / denom) * 100.0f + 0.5f);
+    g_display->setTextColor(COLOR_HEADER);
+    g_display->setCursor(65, 125);
+    g_display->print(perc, 0);
+    g_display->print("%");
   }
+  // Tambahkan grid waktu
+  // drawTimeGrid(leftX, rightX, 25, 95);
+}
+  void drawMotorControl(int updateLine = -1) {
+    if (updateLine == -1) {
+      g_display->fillRect(0, 20, 128, 140, COLOR_BG);
+      drawFooter("1x:EDT 2x:DIR Lx:BACK");
+    }
 
   const char *items[] = {"Run", "Kp", "Ki", "Kd", "Setpt", "PID"};
   int start = (updateLine == -1) ? 0 : updateLine;
@@ -504,10 +623,15 @@ void drawWiFiMenu() {
 void drawCurrentMenu() {
   if (g_currentMenu == 0) {
     drawRootMenu();
+    sendTaggedFloat(MSG_DC_Control, 0);
+    sendTaggedFloat(MSG_AC_Control, 0);
+    sendTaggedFloat(MSG_SPD_REQUEST, 0);
   } else if (g_currentMenu == 1) {
     drawEscalatorMenu();
+    sendTaggedFloat(MSG_SPD_REQUEST, 1);
   } else if (g_currentMenu == 2) {
     drawMotorMenu();
+    sendTaggedFloat(MSG_SPD_REQUEST, 2);
   } else if (g_currentMenu == 3) {
     drawWiFiMenu();
   }
@@ -527,10 +651,10 @@ void menuNavigate(int direction) {
         g_dcKp = constrain(g_dcKp, 0, 100);
       } else if (g_selectedIndex == 2) {
         g_dcKi += direction * 0.01;
-        g_dcKi = constrain(g_dcKi, 0, 10);
+        g_dcKi = constrain(g_dcKi, 0, 50);
       } else if (g_selectedIndex == 3) {
         g_dcKd += direction * 0.01;
-        g_dcKd = constrain(g_dcKd, 0, 10);
+        g_dcKd = constrain(g_dcKd, 0, 50);
       } else if (g_selectedIndex == 4) {
         g_dcSetpoint += direction * 5;
         g_dcSetpoint = constrain(g_dcSetpoint, 0, ESC_GRAPH_MAX);
@@ -541,13 +665,13 @@ void menuNavigate(int direction) {
       // AC motor control edit
       if (g_selectedIndex == 1) {
         g_acKp += direction * 0.1;
-        g_acKp = constrain(g_acKp, 0, 10);
+        g_acKp = constrain(g_acKp, 0, 100);
       } else if (g_selectedIndex == 2) {
         g_acKi += direction * 0.01;
-        g_acKi = constrain(g_acKi, 0, 5);
+        g_acKi = constrain(g_acKi, 0, 50);
       } else if (g_selectedIndex == 3) {
         g_acKd += direction * 0.01;
-        g_acKd = constrain(g_acKd, 0, 5);
+        g_acKd = constrain(g_acKd, 0, 50);
       } else if (g_selectedIndex == 4) {
         g_acSetpoint += direction * 5;
         g_acSetpoint = constrain(g_acSetpoint, 0, AC_GRAPH_MAX);

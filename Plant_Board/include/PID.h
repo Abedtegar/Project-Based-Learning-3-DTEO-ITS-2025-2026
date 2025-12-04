@@ -4,10 +4,10 @@
 #include <Arduino.h>
 
 // Anti-Windup Constants
-#define DC_INTEGRAL_MAX 500.0  // Maksimal integral term untuk DC motor
-#define DC_INTEGRAL_MIN -500.0 // Minimal integral term untuk DC motor
-#define AC_INTEGRAL_MAX 500.0  // Maksimal integral term untuk AC motor
-#define AC_INTEGRAL_MIN -500.0 // Minimal integral term untuk AC motor
+#define DC_INTEGRAL_MAX 1000.0  // Maksimal integral term untuk DC motor
+#define DC_INTEGRAL_MIN -1000.0 // Minimal integral term untuk DC motor
+#define AC_INTEGRAL_MAX 1000.0  // Maksimal integral term untuk AC motor
+#define AC_INTEGRAL_MIN -1000.0 // Minimal integral term untuk AC motor
 
 extern volatile float DCpreviousError;
 extern volatile float DCerrorSum;
@@ -27,6 +27,7 @@ extern volatile float ACkP;
 extern volatile float ACkI;
 extern volatile float ACkD;
 extern volatile float ACsetpoint;
+extern float ACintegralSum;
 
 extern bool PIDMODE;
 float AC_PID(float setpoint, float measured, float dt); // fungsi PID untuk AC
