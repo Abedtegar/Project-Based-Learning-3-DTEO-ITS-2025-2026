@@ -8,7 +8,6 @@
 #include "soc/soc.h"
 #include <Arduino.h>
 
-
 int x = 10;
 void disableBrownout() { WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); }
 
