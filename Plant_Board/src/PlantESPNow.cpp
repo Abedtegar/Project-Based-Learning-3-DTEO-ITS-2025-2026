@@ -4,11 +4,71 @@
 #include "Plant.h"
 #include "PlantConfig.h"
 #include <LedControl.h>
+// Default standalone: DC dan AC sama-sama jalan sebelum ada perintah controller
 bool DCMode = true;
-bool ACMode = false;
-bool PIDMODE = false;
+bool ACMode = true;
+bool PIDMODE = true;
+bool ACPIDMODE = true;
 bool espnowReady = false;
 bool speedRequest = false;
+
+// false selama belum ada satu pun perintah kontrol dari Interface Board.
+// Begitu perintah pertama masuk, plant sepenuhnya mengikuti controller dan
+// default standalone tidak pernah dipakai lagi.
+bool controllerAttached = false;
+
+static void markControllerAttached() {
+  if (controllerAttached)
+    return;
+  controllerAttached = true;
+  Serial.println("Controller terdeteksi: mode standalone dilepas, mengikuti "
+                 "perintah Interface Board");
+}
+
+void applyStandaloneDefaults() {
+  // Kalau controller sudah bicara lebih dulu, jangan timpa perintahnya
+  if (controllerAttached) {
+    Serial.println("Default standalone dilewati (controller sudah aktif)");
+    return;
+  }
+
+  DCMode = true;
+  ACMode = true;
+  dcspeedRequest = true;
+  acspeedRequest = true;
+
+  // AC dijalankan open loop pada duty tetap. Tanpa plant tersambung feedback
+  // RPM selalu 0, jadi PID pasti saturasi ke 255 dan DAC terkunci di 3,3 V --
+  // open loop satu-satunya cara mendapat tegangan DAC yang berarti di sini.
+  // PID DC tidak ikut dimatikan (PIDMODE terpisah dari ACPIDMODE).
+  ACPIDMODE = false;
+  ACsetpoint = (float)AC_SETPOINT_MAX * AC_STANDALONE_DUTY_PCT / 100.0f;
+
+  DCintegralSum = 0;
+  DCpreviousError = 0;
+  ACintegralSum = 0;
+  ACpreviousError = 0;
+
+  DClastEncoder = DCencoder;
+  waktu_awal_motor = millis();
+
+  setLedState(LED_DC_CONTROL, true);
+  setLedState(LED_AC_CONTROL, true);
+  setLedState(LED_PID, PIDMODE);
+
+  // Beritahu Interface Board status awal ini supaya HMI tidak salah tampil
+  sendTaggedFloat(MSG_DC_Control, 1);
+  sendTaggedFloat(MSG_AC_Control, 1);
+  sendTaggedFloat(MSG_AC_Setpoint, ACsetpoint);
+
+  Serial.println("Mode standalone: DC dan AC dijalankan (menunggu controller)");
+  Serial.print("Standalone AC: open loop ");
+  Serial.print(AC_STANDALONE_DUTY_PCT);
+  Serial.print("% -> setpoint ");
+  Serial.print(ACsetpoint);
+  Serial.print(" -> DAC ");
+  Serial.println(map((long)ACsetpoint, 0, AC_SETPOINT_MAX, 0, 255));
+}
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
   // Serial.print("Status Pengiriman: ");
@@ -97,6 +157,7 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       StoreData("pid_ac", "setpoint", value);
       break;
     case MSG_DC_Control:
+      markControllerAttached();
       if (value == 1 && !DCMode) {
         DCintegralSum = 0;
         DCpreviousError = 0;
@@ -116,17 +177,20 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       }
       break;
     case MSG_AC_Control:
+      markControllerAttached();
       if (value == 1) {
         ACMode = true;
         DCMode = false;
         setLedState(LED_AC_CONTROL, true);
         waktu_awal_motor = millis();
         sendTaggedFloat(MSG_AC_Control, 1);
+        Serial.println("AC Control Enabled");
       } else if (value == 0) {
         ACMode = false;
         DCMode = false;
         setLedState(LED_AC_CONTROL, false);
         sendTaggedFloat(MSG_AC_Control, 0);
+        Serial.println("AC Control Disabled");
       }
       break;
     case MSG_AC_Voltage:
@@ -141,33 +205,36 @@ void receiveData(const uint8_t *mac, const uint8_t *data, int len) {
       break;
 
     case MSG_PID_MODE:
+      markControllerAttached();
       UpdatePIDParam();
       if (value == 1) {
         PIDMODE = true;
+        ACPIDMODE = true;
         setLedState(LED_PID, true);
       } else if (value == 0) {
         PIDMODE = false;
+        ACPIDMODE = false;
         setLedState(LED_PID, false);
       }
       break;
-      case ESP_RESTART:
+    case ESP_RESTART:
       if (value == 1)
-      ESP.restart();
+        ESP.restart();
       break;
-      default:
+    default:
       Serial.print("RX TYPE ");
       Serial.print(typeId);
       Serial.print(": ");
       break;
     case MSG_SPD_REQUEST:
+      markControllerAttached();
       if (value == 1) {
         dcspeedRequest = true;
         acspeedRequest = false;
-      } else if(value == 2) {
+      } else if (value == 2) {
         acspeedRequest = true;
         dcspeedRequest = false;
-      }
-      else {
+      } else {
         dcspeedRequest = false;
         acspeedRequest = false;
       }

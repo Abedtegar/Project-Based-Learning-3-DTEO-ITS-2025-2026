@@ -29,8 +29,10 @@ float AC_error_measure = 4.0; // Measurement error covariance (tuning parameter)
 float AC_process_noise = 0.01; // Process noise covariance (tuning parameter)
 float AC_kalman_gain = 0.0;    // Kalman gain
 int ACMotorControlMode = 0;
-bool dcspeedRequest = false;
-bool acspeedRequest = false;
+// Default standalone: kedua stream data/PID aktif sampai Interface Board
+// mengirim MSG_SPD_REQUEST (lihat applyStandaloneDefaults di PlantESPNow.cpp)
+bool dcspeedRequest = true;
+bool acspeedRequest = true;
 int dacspeed = 0;
 // Variable internal
 static hw_timer_t *a_timer = NULL;
@@ -63,15 +65,15 @@ void DC_ProsesPID() {
 void AC_ProsesPID() {
   if (ACnewDataReady) {
     ACnewDataReady = false;
-    if (ACMode && PIDMODE) {
+    if (ACMode && ACPIDMODE) {
       // Get RPM outside of critical section to avoid blocking
       float currentRPM = ACgetRPM();
       portENTER_CRITICAL_ISR(&timerMux);
       ACsignalPWM = AC_PID(ACsetpoint, currentRPM, ACREAD_INTERVAL / 1000.0);
       portEXIT_CRITICAL_ISR(&timerMux);
       ACmotorControl(true, ACsignalPWM, true, 0);
-    } else if (ACMode && !PIDMODE) {
-      ACmotorControl(true, map(ACsetpoint, 0, 1500, 0, 255), true, 0);
+    } else if (ACMode && !ACPIDMODE) {
+      ACmotorControl(true, map(ACsetpoint, 0, AC_SETPOINT_MAX, 0, 255), true, 0);
     } else {
       ACmotorControl(false, 0, true, 0);
       // Reset integral sum when motor is off to prevent windup
@@ -263,7 +265,10 @@ void ACprintEncoderData() {
 
   if (ACnewDataReady) {
     long waktu_sekarang = millis() - waktu_awal_motor;
-    float currentRpm = ACgetRPM();
+    // Pakai hasil sampling terakhir, jangan panggil ACgetRPM() lagi: kalau
+    // dipanggil di sini DAN di AC_ProsesPID, Kalman ter-update dua kali per
+    // tick dan angka RPM yang tercetak bukan angka yang dipakai PID.
+    float currentRpm = ACrpm;
     sendTaggedFloat(MSG_AC_SPEED, currentRpm);
     sendTaggedFloat(MSG_TIMESTAMP, waktu_sekarang);
 
@@ -276,7 +281,7 @@ void ACprintEncoderData() {
     Serial.print(" , ");
     Serial.print(ACError);
     Serial.print(" , ");
-    if (PIDMODE) {
+    if (ACPIDMODE) {
       Serial.print(ACsignalPWM);
     } else {
       Serial.print(dacspeed);
@@ -286,7 +291,14 @@ void ACprintEncoderData() {
     Serial.print(" , ");
     Serial.print(ACkI);
     Serial.print(" , ");
-    Serial.println(ACkD);
+    Serial.print(ACkD);
+    // Kolom diagnostik: ACMode menentukan cabang mana yang dieksekusi, dacspeed
+    // adalah nilai yang benar-benar sampai ke DAC (0 dan 255 = pin digital,
+    // bukan keluaran DAC analog).
+    Serial.print(" , AC=");
+    Serial.print(ACMode ? 1 : 0);
+    Serial.print(" , dac=");
+    Serial.println(dacspeed);
   }
 }
 

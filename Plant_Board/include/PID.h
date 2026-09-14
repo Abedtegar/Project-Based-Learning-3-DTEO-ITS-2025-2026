@@ -30,6 +30,10 @@ extern volatile float ACsetpoint;
 extern float ACintegralSum;
 
 extern bool PIDMODE;
+// Mode PID khusus AC. Perintah MSG_PID_MODE dari controller men-set keduanya,
+// jadi dari sisi HMI perilakunya tidak berubah. Dipisah supaya mode standalone
+// bisa membuat AC open loop tanpa ikut mematikan PID DC.
+extern bool ACPIDMODE;
 float AC_PID(float setpoint, float measured, float dt); // fungsi PID untuk AC
 float DC_PID(float setpoint, float measured, float dt); // fungsi PID untuk DC
 void UpdatePIDParam();

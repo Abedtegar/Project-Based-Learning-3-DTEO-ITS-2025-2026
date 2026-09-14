@@ -525,7 +525,7 @@ void drawMotorGraph(bool fullRedraw = false) {
   g_display->setTextColor(COLOR_ACCENT);
   g_display->setCursor(36, 125);
   g_display->print(g_motorSpeed - g_acSetpoint, 0);
-  //percent error (50 samples)
+  // percent error (50 samples)
   {
     const int pctSamples = 50;
     float sumAbs = 0.0f;
@@ -546,11 +546,11 @@ void drawMotorGraph(bool fullRedraw = false) {
   // Tambahkan grid waktu
   // drawTimeGrid(leftX, rightX, 25, 95);
 }
-  void drawMotorControl(int updateLine = -1) {
-    if (updateLine == -1) {
-      g_display->fillRect(0, 20, 128, 140, COLOR_BG);
-      drawFooter("1x:EDT 2x:DIR Lx:BACK");
-    }
+void drawMotorControl(int updateLine = -1) {
+  if (updateLine == -1) {
+    g_display->fillRect(0, 20, 128, 140, COLOR_BG);
+    drawFooter("1x:EDT 2x:DIR Lx:BACK");
+  }
 
   const char *items[] = {"Run", "Kp", "Ki", "Kd", "Setpt", "PID"};
   int start = (updateLine == -1) ? 0 : updateLine;
@@ -651,10 +651,10 @@ void menuNavigate(int direction) {
         g_dcKp = constrain(g_dcKp, 0, 100);
       } else if (g_selectedIndex == 2) {
         g_dcKi += direction * 0.01;
-        g_dcKi = constrain(g_dcKi, 0, 50);
+        g_dcKi = constrain(g_dcKi, 0, 100);
       } else if (g_selectedIndex == 3) {
         g_dcKd += direction * 0.01;
-        g_dcKd = constrain(g_dcKd, 0, 50);
+        g_dcKd = constrain(g_dcKd, 0, 100);
       } else if (g_selectedIndex == 4) {
         g_dcSetpoint += direction * 5;
         g_dcSetpoint = constrain(g_dcSetpoint, 0, ESC_GRAPH_MAX);

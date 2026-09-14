@@ -12,8 +12,13 @@ volatile float DCkD = 0.05f;
 volatile float DCsetpoint = 50.0f;
 
 // Tambahkan batas minimum PWM untuk anti-stall
+// DC: skala LEDC 12-bit (0-4095)
 #define DC_PWM_MIN 800.0f
-#define AC_PWM_MIN 800.0f
+// AC: skala DAC 8-bit (0-255), BUKAN 12-bit seperti DC.
+// AC_DAC_MIN ~20% skala penuh, sepadan dengan DC_PWM_MIN (800/4095).
+// Tuning sesuai deadband driver AC; set 0 kalau tidak perlu anti-stall.
+#define AC_DAC_MAX 255.0f
+#define AC_DAC_MIN 51.0f
 
 volatile float ACpreviousError = 0.0f;
 volatile float ACerrorSum = 0.0f;
@@ -35,31 +40,43 @@ float AC_PID(float setpoint, float measured, float dt) {
 
   ACProportional = ACkP * ACError;
 
-  // Akumulasi error untuk integral term
-  ACintegralSum += ACError * dt;
-
-  // === ANTI-WINDUP: Clamp integral sum ===
-  if (ACintegralSum > AC_INTEGRAL_MAX)
-    ACintegralSum = AC_INTEGRAL_MAX;
-  else if (ACintegralSum < AC_INTEGRAL_MIN)
-    ACintegralSum = AC_INTEGRAL_MIN;
-
-  ACIntegral = ACkI * ACintegralSum;
-
   ACDerivative = ACkD * (ACError - ACpreviousError) / dt;
 
   ACpreviousError = ACError;
 
-  output = ACProportional + ACIntegral + ACDerivative;
+  // Calon nilai integral baru, belum tentu dipakai (lihat anti-windup)
+  float candidateSum = ACintegralSum + ACError * dt;
+  if (candidateSum > AC_INTEGRAL_MAX)
+    candidateSum = AC_INTEGRAL_MAX;
+  else if (candidateSum < AC_INTEGRAL_MIN)
+    candidateSum = AC_INTEGRAL_MIN;
 
-  // === OUTPUT SATURATION & ANTI-STALL ===
-  if (output > 255.0)
-    output = 255.0;
-  else if (output < 0.0)
-    output = 0.0;
-  // Anti-stall: jika output di antara 0 dan AC_PWM_MIN, naikkan ke AC_PWM_MIN
-  else if (output > 0.0 && output < AC_PWM_MIN)
-    output = AC_PWM_MIN;
+  output = ACProportional + ACkI * candidateSum + ACDerivative;
+
+  // === ANTI-WINDUP: conditional integration ===
+  // Kalau keluaran sudah mentok dan error masih mendorong ke arah yang sama,
+  // jangan akumulasi integral. Tanpa ini integral terus tumbuh selama feedback
+  // RPM diam di 0, dan DAC tetap terkunci di batas atas walau setpoint sudah
+  // diturunkan.
+  if ((output > AC_DAC_MAX && ACError > 0.0f) ||
+      (output < 0.0f && ACError < 0.0f)) {
+    output = ACProportional + ACkI * ACintegralSum + ACDerivative;
+  } else {
+    ACintegralSum = candidateSum;
+  }
+  ACIntegral = ACkI * ACintegralSum;
+
+  // === OUTPUT SATURATION & ANTI-STALL (skala DAC 0-255) ===
+  // Anti-stall diperiksa DULU, saturasi belakangan. Urutan sebaliknya (versi
+  // lama) membuat setiap keluaran wajar 0 < out < 255 dilempar ke AC_PWM_MIN
+  // 800 yang salah skala, lalu di-constrain jadi 255 -- DAC cuma bisa 0 V
+  // atau 3,3 V, tidak pernah di antaranya.
+  if (output <= 0.0f)
+    output = 0.0f;
+  else if (output < AC_DAC_MIN)
+    output = AC_DAC_MIN;
+  else if (output > AC_DAC_MAX)
+    output = AC_DAC_MAX;
 
   return output;
 }

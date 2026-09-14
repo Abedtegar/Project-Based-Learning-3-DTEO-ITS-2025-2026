@@ -31,6 +31,8 @@
 extern bool espnowReady;
 extern bool dcspeedRequest;
 extern bool acspeedRequest;
+extern bool controllerAttached;
+void applyStandaloneDefaults(); // nyalakan DC+AC selama controller belum bicara
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void espnow_init();
 void sendData(float data);

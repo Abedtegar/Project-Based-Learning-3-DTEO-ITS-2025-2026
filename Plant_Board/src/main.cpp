@@ -45,6 +45,11 @@ void setup() {
   ACstartEncoderTimer();
   ACsetKalmanParams(0.01, 3.0); // Ubah parameter jika perlu
 
+  // 6. Default standalone: DC dan AC langsung jalan. Perintah pertama dari
+  //    Interface Board mengambil alih, setelah itu plant murni mengikuti
+  //    controller.
+  applyStandaloneDefaults();
+
   Serial.println("=== SETUP COMPLETE ===");
   Serial.println();
 }

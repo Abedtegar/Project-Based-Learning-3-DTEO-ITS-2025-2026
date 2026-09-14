@@ -46,6 +46,12 @@
 
 #define DC_MAX_RPM 1000
 #define AC_MAX_RPM 1600
+
+// Batas atas setpoint AC untuk pemetaan open loop ke DAC 0-255.
+// Harus sama dengan AC_GRAPH_MAX di Interface Board.
+#define AC_SETPOINT_MAX 1500
+// Duty open loop AC saat standalone (belum ada perintah dari controller)
+#define AC_STANDALONE_DUTY_PCT 50
 //
 // ========================================
 // NETWORK CONFIGURATION
